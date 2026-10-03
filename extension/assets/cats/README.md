@@ -1,8 +1,8 @@
 # Ассет с тремя котами
 
-Положите готовый файл в эту папку под именем `three-cats.webm`.
+Текущий ассет находится в `three-cats/video.webm`, а разметка — в `three-cats/motion-map.json`.
 
-Текущий `three-cats.webm` содержит полный согласованный Shorts-референс в оригинальном направлении. Удалены только зелёный фон и пустые вертикальные поля. Расширение циклически воспроизводит все 11,8 секунды без изменения скорости и перемоток.
+Текущий `three-cats/video.webm` содержит полный согласованный Shorts-референс в оригинальном направлении. Удалены только зелёный фон и пустые вертикальные поля. Карта `three-cats/motion-map.json` делит все 11,8 секунды на три непрерывных движения и привязывает их визуальные акценты к музыкальным ударам.
 
 Требования:
 
@@ -16,19 +16,19 @@
 Для первичной chroma-key обработки используйте:
 
 ```bash
-tools/assets/process-cats.sh input.mp4 extension/assets/cats/three-cats.webm
+tools/assets/process-cats.sh input.mp4 extension/assets/cats/three-cats/video.webm
 ```
 
 У этого универсального скрипта есть необязательные аргументы: начало, длительность, цвет фона, similarity и blend.
 
 ```bash
-tools/assets/process-cats.sh input.mp4 extension/assets/cats/three-cats.webm 1.25 4.0 0x00FF00 0.18 0.08
+tools/assets/process-cats.sh input.mp4 extension/assets/cats/three-cats/video.webm 1.25 4.0 0x00FF00 0.18 0.08
 ```
 
 Для точного воспроизведения текущего ассета из оригинального файла 608×1080 используйте:
 
 ```bash
-tools/assets/process-reference-cats.sh input.mp4 extension/assets/cats/three-cats.webm
+tools/assets/process-reference-cats.sh input.mp4 extension/assets/cats/three-cats/video.webm
 ```
 
 Значения нужно подобрать по исходнику. После кодирования проверьте края шерсти, лапы и motion blur на белом, чёрном и цветном фоне. При зелёном ореоле увеличьте despill или вручную доработайте маску.

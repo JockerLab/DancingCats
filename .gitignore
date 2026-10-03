@@ -1,10 +1,26 @@
-# Source media and intermediate chroma-key renders can be large and may have
-# separate licensing terms. Keep only the reviewed runtime WebM when approved.
+# Source media, runtime videos and intermediate chroma-key renders can have
+# separate licensing terms. Motion maps stay public; users provide videos.
 assets-source/
 tools/assets/work/
+extension/assets/cats/*/video.webm
+
+# Local backend state. Analysis results contain no audio, but stay local by
+# default; models are downloaded from their original distributors.
+backend/data/
+backend/cache/
+backend/models/
+backend/tmp/
+.env
+cookies.txt
+*.wav
+*.mp3
+*.m4a
+*.mp4
 
 # Local editor/OS files
 .DS_Store
 *.swp
 __pycache__/
 *.pyc
+.pytest_cache/
+.venv/

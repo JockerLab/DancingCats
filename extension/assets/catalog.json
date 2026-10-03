@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "defaultAssetId": "three-cats",
+  "assets": [
+    {
+      "id": "three-cats",
+      "name": "Three Dancing Cats",
+      "motionMap": "cats/three-cats/motion-map.json",
+      "videoIncluded": false
+    }
+  ]
+}
