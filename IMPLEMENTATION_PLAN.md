@@ -1,5 +1,7 @@
 # Dancing Cats — план реализации Chromium-расширения
 
+> Текущий согласованный прототип упрощён: используется полный 11,8-секундный ассет с прозрачностью и обычным циклическим воспроизведением. Захват аудио, BPM/phase detector, изменение скорости, перемотки и редактируемая панель настроек удалены из активной реализации. Доступны только включение оверлея, перетаскивание и масштабирование мышкой. Остальные разделы ниже сохранены как история и возможное направление следующей итерации, а не описание текущего кода.
+
 ## 1. Цель продукта
 
 Создать расширение для настольных Chromium-браузеров версии 116 и новее, которое на страницах обычных видео YouTube и YouTube Shorts:
@@ -396,70 +398,50 @@ Host занимает область плеера, имеет высокий, н
 
 Частота полных `BEAT_STATE` ограничивается, например, 10 сообщениями в секунду. Локальная анимация между обновлениями интерполируется в content script.
 
-## 11. Предлагаемая структура проекта
+## 11. Структура первого MVP
 
 ```text
 DancingCats/
-├── src/
-│   ├── background/
-│   │   └── service-worker.ts
-│   ├── offscreen/
-│   │   ├── index.html
-│   │   ├── offscreen.ts
-│   │   ├── audio-worklet.ts
-│   │   └── beat-detector.ts
-│   ├── content/
-│   │   ├── content.ts
-│   │   ├── player-locator.ts
-│   │   ├── overlay.ts
-│   │   ├── synchronizer.ts
-│   │   └── overlay.css
-│   ├── shared/
-│   │   ├── messages.ts
-│   │   ├── settings.ts
-│   │   ├── cat-clips.ts
-│   │   └── time.ts
+├── extension/
+│   ├── manifest.json
+│   ├── background.js
+│   ├── shared.js
+│   ├── offscreen.html
+│   ├── offscreen.js
+│   ├── beat-detector.js
+│   ├── content.js
 │   └── assets/cats/
-│       ├── three-cats.webm
-│       └── three-cats.json
+│       ├── README.md
+│       └── three-cats.webm  # добавляется после обработки исходника
 ├── tools/
 │   └── assets/
-│       ├── README.md
 │       └── process-cats.sh
-├── tests/
-│   ├── unit/
-│   ├── fixtures/
-│   └── browser/
-├── public/manifest.json
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
+├── tools/validate_extension.py
+├── README.md
 └── IMPLEMENTATION_PLAN.md
 ```
 
-Инструмент обработки ассета может зависеть от системного FFmpeg и не входит в runtime расширения.
+Инструмент обработки ассета зависит от системного FFmpeg и не входит в runtime расширения. По мере роста кода файлы content/offscreen могут быть разделены на модули и переведены на TypeScript со сборкой, но это не требуется для проверки платформенного прототипа.
 
 ## 12. Технологии
 
-- TypeScript в строгом режиме;
-- Vite для нескольких entry points и статических ресурсов;
-- Web Audio API + AudioWorklet;
+- современный JavaScript без шага сборки для первого MVP;
+- Web Audio API + `AnalyserNode`; AudioWorklet остаётся вариантом оптимизации после профилирования;
 - Chrome Extensions Manifest V3 APIs;
-- Vitest для модульных тестов;
-- Playwright или Puppeteer для локальных smoke-тестов unpacked extension;
-- ESLint и Prettier либо единый эквивалентный набор форматирования;
+- dependency-free Python-валидатор структуры пакета;
+- ручные smoke-тесты unpacked extension на первом этапе;
 - FFmpeg для подготовки прозрачного WebM.
 
-Тяжёлая библиотека анализа аудио не добавляется в первой реализации. Если собственный детектор не достигнет критериев точности, библиотека выбирается отдельно с учётом размера, лицензии и совместимости с MV3 CSP.
+Тяжёлая библиотека анализа аудио не добавляется в первой реализации. TypeScript, автоматизированный browser runner и более полный unit-test harness добавляются после подтверждения работоспособности платформенного пути. Если собственный детектор не достигнет критериев точности, библиотека выбирается отдельно с учётом размера, лицензии и совместимости с MV3 CSP.
 
 ## 13. Этапы реализации
 
 ### Этап 0. Каркас проекта
 
-- создать `package.json`, TypeScript/Vite-конфигурацию и Manifest V3;
-- настроить сборку service worker, content script и offscreen document;
-- добавить команды `dev`, `build`, `test`, `lint` и упаковку ZIP;
-- проверить загрузку unpacked extension без ошибок CSP.
+- создать Manifest V3 и zero-build структуру service worker, content script и offscreen document;
+- добавить статическую проверку ссылок Manifest, разрешений и CSP-опасных конструкций;
+- проверить загрузку unpacked extension без ошибок CSP;
+- после платформенного smoke-теста решить, нужен ли TypeScript/Vite до расширения функциональности.
 
 Результат: пустое расширение устанавливается и распознаёт страницы YouTube.
 

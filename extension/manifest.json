@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Dancing Cats for YouTube",
+  "version": "0.2.0",
+  "description": "Зацикленные танцующие коты поверх видео YouTube.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*"
+  ],
+  "action": {
+    "default_title": "Включить или выключить Dancing Cats"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/cats/*.webm"
+      ],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "use_dynamic_url": true
+    }
+  ]
+}

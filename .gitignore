@@ -1,0 +1,10 @@
+# Source media and intermediate chroma-key renders can be large and may have
+# separate licensing terms. Keep only the reviewed runtime WebM when approved.
+assets-source/
+tools/assets/work/
+
+# Local editor/OS files
+.DS_Store
+*.swp
+__pycache__/
+*.pyc
