@@ -5,7 +5,7 @@ from dancing_cats_backend.choreography import build_choreography
 
 
 class ChoreographyTests(unittest.TestCase):
-    def test_builds_contiguous_cues_with_effects(self):
+    def test_builds_contiguous_cues_with_motion_metadata(self):
         beats = [index * 0.5 for index in range(49)]
         analysis = SongAnalysis(
             bpm=120,
@@ -40,7 +40,9 @@ class ChoreographyTests(unittest.TestCase):
         self.assertEqual(len(result["cues"]), 6)
         self.assertEqual(result["cues"][0]["start"], 0)
         self.assertEqual(result["cues"][0]["end"], result["cues"][1]["start"])
-        self.assertGreater(result["cues"][0]["scale"]["pulse"], 0)
+        self.assertNotIn("scale", result["cues"][0])
+        self.assertNotIn("mirror", result["cues"][0])
+        self.assertIn("motionProfile", result["cues"][0])
         self.assertEqual({cue["segmentId"] for cue in result["cues"]}, {"a", "b"})
 
     def test_energy_selection_does_not_reproduce_the_native_loop(self):
@@ -85,6 +87,48 @@ class ChoreographyTests(unittest.TestCase):
         self.assertNotIn("low", segment_ids)
         self.assertIn("high", segment_ids)
         self.assertTrue(all(left != right for left, right in zip(segment_ids, segment_ids[1:])))
+
+    def test_repeats_loopable_motion_with_a_limit(self):
+        beats = [index * 0.5 for index in range(41)]
+        analysis = SongAnalysis(
+            bpm=140,
+            beats=beats,
+            downbeats=beats[::4],
+            beat_positions=[index % 4 + 1 for index in range(len(beats))],
+            segments=[SongSegment(0, 20.5, "chorus", 0.95)],
+            duration=20.5,
+        )
+        motion_map = {
+            "id": "test-cats",
+            "segments": [
+                {
+                    "id": "calm", "beats": 4, "energy": 0.2,
+                    "sourceStart": 0, "sourceEnd": 2,
+                    "entryPose": "a", "exitPose": "a", "next": ["dynamic"],
+                    "hardCutSafe": True, "loopable": False, "maxConsecutive": 1,
+                },
+                {
+                    "id": "dynamic", "beats": 4, "energy": 0.95,
+                    "sourceStart": 2, "sourceEnd": 4,
+                    "entryPose": "b", "exitPose": "b", "next": ["dynamic", "calm"],
+                    "hardCutSafe": True, "loopable": True, "maxConsecutive": 2,
+                    "sectionAffinity": ["chorus"], "tempoRange": [120, 180],
+                },
+            ],
+        }
+        result = build_choreography(
+            analysis,
+            motion_map,
+            video_id="_VvPjfjOpxE",
+            title="Test",
+            asset_version="abc",
+        )
+        segment_ids = [cue["segmentId"] for cue in result["cues"]]
+        self.assertIn(("dynamic", "dynamic"), zip(segment_ids, segment_ids[1:]))
+        self.assertNotIn(
+            ("dynamic", "dynamic", "dynamic"),
+            zip(segment_ids, segment_ids[1:], segment_ids[2:]),
+        )
 
 
 if __name__ == "__main__":

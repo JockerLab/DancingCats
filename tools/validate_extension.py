@@ -13,15 +13,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSION = ROOT / "extension"
-ALLOWED_PERMISSIONS = {"offscreen", "storage", "tabCapture"}
+ALLOWED_PERMISSIONS = {"storage"}
 REQUIRED_FILES = {
     "manifest.json",
     "background.js",
     "shared.js",
     "content.js",
-    "offscreen.html",
-    "offscreen.js",
-    "beat-detector.js",
     "assets/catalog.json",
 }
 
@@ -51,11 +48,11 @@ def main() -> None:
     permissions = set(manifest.get("permissions", []))
     if permissions != ALLOWED_PERMISSIONS:
         fail(f"unexpected permissions: {sorted(permissions ^ ALLOWED_PERMISSIONS)}")
-    expected_hosts = {"https://www.youtube.com/*", "http://127.0.0.1:8765/*"}
+    expected_hosts = {"https://www.youtube.com/watch*", "http://127.0.0.1:8765/*"}
     if set(manifest.get("host_permissions", [])) != expected_hosts:
         fail("host permissions must remain restricted to YouTube and the local analyzer")
     if manifest.get("action", {}).get("default_popup"):
-        fail("default_popup prevents action.onClicked from starting tab capture")
+        fail("default_popup prevents action.onClicked from toggling the overlay")
 
     referenced = {manifest.get("background", {}).get("service_worker")}
     for entry in manifest.get("content_scripts", []):
@@ -66,15 +63,10 @@ def main() -> None:
     if missing_references:
         fail(f"manifest references missing files: {', '.join(missing_references)}")
 
-    offscreen_html = (EXTENSION / "offscreen.html").read_text(encoding="utf-8")
-    for source in re.findall(r'<script\s+src="([^"]+)"', offscreen_html):
-        if not (EXTENSION / source).is_file():
-            fail(f"offscreen.html references missing script: {source}")
-
     for javascript in EXTENSION.glob("*.js"):
         source = javascript.read_text(encoding="utf-8")
         remote_urls = set(re.findall(r"https?://[^\"'`\s]+", source))
-        allowed_prefixes = ("http://127.0.0.1:8765/v1/",) if javascript.name == "offscreen.js" else ()
+        allowed_prefixes = ("http://127.0.0.1:8765",) if javascript.name == "background.js" else ()
         unexpected_urls = {url for url in remote_urls if not url.startswith(allowed_prefixes)}
         if unexpected_urls:
             fail(f"unexpected remote URL found in executable source: {javascript.name}")
@@ -110,8 +102,10 @@ def validate_catalog() -> None:
 
 def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> None:
     asset_id = descriptor["id"]
-    if motion_map.get("schemaVersion") != 1 or motion_map.get("id") != asset_id:
+    if motion_map.get("schemaVersion") != 2 or motion_map.get("id") != asset_id:
         fail(f"invalid motion map identity for {asset_id}")
+    if motion_map.get("entityMode") != "single-group":
+        fail(f"{asset_id} must be described as one indivisible group")
     video_relative = motion_map.get("video")
     if not video_relative or Path(video_relative).is_absolute() or ".." in Path(video_relative).parts:
         fail(f"unsafe video path for {asset_id}")
@@ -138,34 +132,38 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
         start = float(segment.get("sourceStart", -1))
         end = float(segment.get("sourceEnd", -1))
         beats = int(segment.get("beats", 0))
-        anchors = segment.get("anchors", [])
         energy = float(segment.get("energy", -1))
         next_ids = segment.get("next")
+        tempo_range = segment.get("tempoRange")
+        affinities = segment.get("sectionAffinity")
         if abs(start - previous_end) > 0.001 or end <= start or end > duration + 0.001:
             fail(f"non-contiguous source range in {asset_id}/{segment.get('id')}")
-        if beats <= 0 or len(anchors) < 2:
-            fail(f"invalid beat anchors in {asset_id}/{segment.get('id')}")
+        if beats <= 0:
+            fail(f"beats must be positive in {asset_id}/{segment.get('id')}")
         if not 0 <= energy <= 1:
             fail(f"energy must be between 0 and 1 in {asset_id}/{segment.get('id')}")
         if not isinstance(segment.get("tags"), list):
             fail(f"tags must be an array in {asset_id}/{segment.get('id')}")
+        if not isinstance(tempo_range, list) or len(tempo_range) != 2 or tempo_range[1] < tempo_range[0]:
+            fail(f"tempoRange must contain an ordered pair in {asset_id}/{segment.get('id')}")
+        if not isinstance(affinities, list) or not affinities:
+            fail(f"sectionAffinity must be non-empty in {asset_id}/{segment.get('id')}")
+        if not 0 <= float(segment.get("intensity", -1)) <= 1:
+            fail(f"intensity must be between 0 and 1 in {asset_id}/{segment.get('id')}")
+        if not 0 <= float(segment.get("fluidity", -1)) <= 1:
+            fail(f"fluidity must be between 0 and 1 in {asset_id}/{segment.get('id')}")
+        if not isinstance(segment.get("hardCutSafe"), bool):
+            fail(f"hardCutSafe must be boolean in {asset_id}/{segment.get('id')}")
+        if not isinstance(segment.get("loopable"), bool):
+            fail(f"loopable must be boolean in {asset_id}/{segment.get('id')}")
+        if int(segment.get("maxConsecutive", 0)) < 1:
+            fail(f"maxConsecutive must be positive in {asset_id}/{segment.get('id')}")
         if not segment.get("entryPose") or not segment.get("exitPose"):
             fail(f"entryPose and exitPose are required in {asset_id}/{segment.get('id')}")
         if not isinstance(next_ids, list) or not next_ids:
             fail(f"next must contain at least one transition in {asset_id}/{segment.get('id')}")
-        if anchors[0].get("beat") != 0 or abs(float(anchors[0].get("time", -1)) - start) > 0.001:
-            fail(f"first anchor mismatch in {asset_id}/{segment.get('id')}")
-        if anchors[-1].get("beat") != beats or abs(float(anchors[-1].get("time", -1)) - end) > 0.001:
-            fail(f"last anchor mismatch in {asset_id}/{segment.get('id')}")
         if any(next_id not in segment_ids for next_id in next_ids):
             fail(f"unknown transition target in {asset_id}/{segment.get('id')}")
-        for anchor in anchors:
-            strength = float(anchor.get("strength", -1))
-            if not 0 <= strength <= 1:
-                fail(f"anchor strength must be between 0 and 1 in {asset_id}/{segment.get('id')}")
-        for left, right in zip(anchors, anchors[1:]):
-            if right["beat"] <= left["beat"] or right["time"] <= left["time"]:
-                fail(f"anchors must be monotonic in {asset_id}/{segment.get('id')}")
         total_beats += beats
         previous_end = end
 

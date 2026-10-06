@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DANCING_CATS_HOST=0.0.0.0 \
     DANCING_CATS_ASSETS_DIR=/assets \
+    DANCING_CATS_ANALYZER_MODEL=harmonix-fold0 \
     HF_HOME=/models/huggingface \
     TORCH_HOME=/models/torch \
     XDG_CACHE_HOME=/models/cache

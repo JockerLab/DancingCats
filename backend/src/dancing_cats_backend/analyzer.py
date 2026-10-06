@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import math
+import logging
+import os
+import threading
 import wave
 from array import array
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+
+LOGGER = logging.getLogger(__name__)
+DEFAULT_MODEL = "harmonix-fold0"
+_SESSION = None
+_SESSION_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -36,7 +45,34 @@ class SongAnalysis:
         }
 
 
+def analyzer_model_name() -> str:
+    return os.getenv("DANCING_CATS_ANALYZER_MODEL", DEFAULT_MODEL)
+
+
+def warm_up_analyzer() -> None:
+    allin1 = _import_all_in_one()
+    session = _get_session(allin1)
+    if session is None:
+        LOGGER.info(
+            "All-In-One reusable sessions are unavailable; model %s will load per job",
+            analyzer_model_name(),
+        )
+    else:
+        LOGGER.info("All-In-One model %s is ready", analyzer_model_name())
+
+
 def analyze_with_all_in_one(wav_path: Path) -> SongAnalysis:
+    allin1 = _import_all_in_one()
+    session = _get_session(allin1)
+    if session is not None:
+        result = session.infer(str(wav_path))
+    else:
+        result = allin1.analyze(str(wav_path), model=analyzer_model_name())
+
+    return _normalize_analysis(result, wav_path)
+
+
+def _import_all_in_one():
     try:
         import allin1_infer as allin1
     except ImportError:
@@ -46,8 +82,24 @@ def analyze_with_all_in_one(wav_path: Path) -> SongAnalysis:
             raise RuntimeError(
                 "All-In-One is not installed. Use the Docker image or install the analysis extra."
             ) from error
+    return allin1
 
-    result = allin1.analyze(str(wav_path))
+
+def _get_session(allin1):
+    global _SESSION
+    session_class = getattr(allin1, "AllInOneSession", None)
+    if session_class is None:
+        return None
+    with _SESSION_LOCK:
+        if _SESSION is None:
+            LOGGER.info("Loading reusable All-In-One model %s", analyzer_model_name())
+            session = session_class(model=analyzer_model_name())
+            session.load()
+            _SESSION = session
+        return _SESSION
+
+
+def _normalize_analysis(result, wav_path: Path) -> SongAnalysis:
     beats = [round(float(value), 6) for value in result.beats]
     raw_positions = list(getattr(result, "beat_positions", []))
     beat_positions = [int(value) for value in raw_positions]

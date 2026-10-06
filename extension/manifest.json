@@ -1,14 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Dancing Cats for YouTube",
-  "version": "0.4.1",
-  "description": "Танцующие коты поверх YouTube с локально рассчитанной хореографией.",
+  "version": "0.5.0",
+  "description": "Группа танцующих котов поверх YouTube по карте локального backend.",
   "minimum_chrome_version": "116",
-  "permissions": [
-    "offscreen",
-    "storage",
-    "tabCapture"
-  ],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "http://127.0.0.1:8765/*"

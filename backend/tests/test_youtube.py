@@ -8,7 +8,6 @@ class ExtractVideoIdTests(unittest.TestCase):
         expected = "_VvPjfjOpxE"
         for url in (
             "https://www.youtube.com/watch?v=_VvPjfjOpxE",
-            "https://www.youtube.com/shorts/_VvPjfjOpxE",
             "https://youtu.be/_VvPjfjOpxE",
         ):
             with self.subTest(url=url):
@@ -19,6 +18,7 @@ class ExtractVideoIdTests(unittest.TestCase):
             "http://www.youtube.com/watch?v=_VvPjfjOpxE",
             "https://example.com/watch?v=_VvPjfjOpxE",
             "https://www.youtube.com/playlist?list=abc",
+            "https://www.youtube.com/shorts/_VvPjfjOpxE",
         ):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 extract_video_id(url)

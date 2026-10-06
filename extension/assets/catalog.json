@@ -4,7 +4,7 @@
   "assets": [
     {
       "id": "three-cats",
-      "name": "Three Dancing Cats",
+      "name": "Dancing Cats Group",
       "motionMap": "cats/three-cats/motion-map.json",
       "videoIncluded": false
     }

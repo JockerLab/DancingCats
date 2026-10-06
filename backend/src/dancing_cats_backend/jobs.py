@@ -5,12 +5,13 @@ import json
 import logging
 import tempfile
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from .analyzer import analyze_with_all_in_one
+from .analyzer import analyze_with_all_in_one, analyzer_model_name, warm_up_analyzer
 from .choreography import build_choreography, load_motion_map
 from .config import Settings
 from .youtube import download_audio, extract_video_id
@@ -32,15 +33,17 @@ class JobManager:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="music-analysis")
+        self.warmup_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="model-warmup")
         self.lock = threading.Lock()
         self.jobs: dict[str, Job] = {}
         self.active_by_key: dict[str, str] = {}
+        self.warmup_executor.submit(self._warm_up)
 
     def submit(self, youtube_url: str, asset_id: str, force: bool = False) -> Job:
         video_id = extract_video_id(youtube_url)
         motion_map, asset_version = load_motion_map(self.settings.assets_dir, asset_id)
         cache_key = hashlib.sha256(
-            f"{video_id}:{asset_id}:{asset_version}:all-in-one-v2".encode()
+            f"{video_id}:{asset_id}:{asset_version}:{analyzer_model_name()}:planner-v3".encode()
         ).hexdigest()[:24]
         with self.lock:
             active_id = self.active_by_key.get(cache_key)
@@ -71,6 +74,7 @@ class JobManager:
 
     def shutdown(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=False)
+        self.warmup_executor.shutdown(wait=False, cancel_futures=False)
 
     def _run(
         self,
@@ -84,14 +88,29 @@ class JobManager:
         if job is None:
             return
         LOGGER.info("Starting analysis job %s for video %s", job_id, job.video_id)
+        started_at = time.perf_counter()
         try:
             with tempfile.TemporaryDirectory(prefix="dancing-cats-") as temporary:
+                stage_started_at = time.perf_counter()
                 audio = download_audio(
                     youtube_url,
                     Path(temporary),
                     self.settings.max_duration_seconds,
                 )
+                LOGGER.info(
+                    "Analysis job %s downloaded and converted audio in %.2fs",
+                    job_id,
+                    time.perf_counter() - stage_started_at,
+                )
+                stage_started_at = time.perf_counter()
                 analysis = analyze_with_all_in_one(audio.wav_path)
+                LOGGER.info(
+                    "Analysis job %s ran %s inference in %.2fs",
+                    job_id,
+                    analyzer_model_name(),
+                    time.perf_counter() - stage_started_at,
+                )
+                stage_started_at = time.perf_counter()
                 choreography = build_choreography(
                     analysis,
                     motion_map,
@@ -106,11 +125,17 @@ class JobManager:
                     encoding="utf-8",
                 )
                 temporary_map.replace(destination)
+                LOGGER.info(
+                    "Analysis job %s planned and stored choreography in %.2fs",
+                    job_id,
+                    time.perf_counter() - stage_started_at,
+                )
             self._set_status(job_id, "complete")
             LOGGER.info(
-                "Analysis job %s completed with %d choreography cues",
+                "Analysis job %s completed with %d choreography cues in %.2fs",
                 job_id,
                 len(choreography["cues"]),
+                time.perf_counter() - started_at,
             )
         except Exception as error:
             LOGGER.exception("Analysis job %s failed for video %s", job_id, job.video_id)
@@ -118,6 +143,12 @@ class JobManager:
         finally:
             with self.lock:
                 self.active_by_key.pop(job.cache_key, None)
+
+    def _warm_up(self) -> None:
+        try:
+            warm_up_analyzer()
+        except Exception:
+            LOGGER.exception("Unable to warm up All-In-One; the first job will retry")
 
     def _set_status(self, job_id: str, status: str, error: str | None = None) -> None:
         with self.lock:

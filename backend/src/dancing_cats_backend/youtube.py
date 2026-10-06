@@ -27,10 +27,8 @@ def extract_video_id(raw_url: str) -> str:
         candidate = parsed.path.strip("/").split("/", 1)[0]
     elif parsed.path == "/watch":
         candidate = parse_qs(parsed.query).get("v", [""])[0]
-    elif parsed.path.startswith("/shorts/"):
-        candidate = parsed.path.split("/", 3)[2]
     else:
-        raise ValueError("Expected a YouTube watch, shorts, or youtu.be URL")
+        raise ValueError("Expected a YouTube watch or youtu.be URL")
     if not VIDEO_ID.fullmatch(candidate):
         raise ValueError("Invalid YouTube video id")
     return candidate

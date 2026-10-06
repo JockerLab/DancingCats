@@ -1,179 +1,164 @@
 importScripts("shared.js");
 
 const { MESSAGE } = DancingCatsShared;
-const SESSION_KEY = "activeCapture";
+const SESSION_KEY = "activeOverlay";
+const API_ORIGIN = "http://127.0.0.1:8765";
 
 chrome.runtime.onInstalled.addListener(() => {
-  void chrome.storage.session.remove(SESSION_KEY);
+  void chrome.storage.session.remove([SESSION_KEY, "activeCapture"]);
   void chrome.storage.local.remove("settings");
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id || !isYouTubeUrl(tab.url)) {
+  if (!tab.id || !isYouTubeWatchUrl(tab.url)) {
     await setBadge(tab.id, "!", "#b91c1c");
     return;
   }
 
-  const streamResultPromise = chrome.tabCapture
-    .getMediaStreamId({ targetTabId: tab.id })
-    .then((streamId) => ({ streamId }), (error) => ({ error }));
-  const active = await getActiveCapture();
-
+  const active = await getActiveOverlay();
   if (active?.tabId === tab.id) {
-    await stopCapture(tab.id, "user");
+    await disableOverlay(tab.id, "user");
     return;
   }
-  if (active?.tabId) await stopCapture(active.tabId, "switched-tab");
+  if (active?.tabId) await disableOverlay(active.tabId, "switched-tab");
 
-  const streamResult = await streamResultPromise;
-  if (streamResult.error) {
-    await handleError(tab.id, streamResult.error);
-    return;
-  }
-
-  try {
-    await ensureOffscreenDocument();
-    await chrome.storage.session.set({
-      [SESSION_KEY]: { tabId: tab.id, state: "starting" }
-    });
-    await setBadge(tab.id, "…", "#ca8a04");
-    await safeSendToTab(tab.id, { type: MESSAGE.ENABLE_OVERLAY, state: "starting" });
-    const response = await chrome.runtime.sendMessage({
-      target: "offscreen",
-      type: MESSAGE.START_CAPTURE,
-      tabId: tab.id,
-      streamId: streamResult.streamId,
-      youtubeUrl: tab.url
-    });
-    if (response?.ok === false) throw new Error(response.error ?? "Unable to start audio capture");
-  } catch (error) {
-    await handleError(tab.id, error);
-  }
+  await chrome.storage.session.set({
+    [SESSION_KEY]: { tabId: tab.id, state: "loading" }
+  });
+  await setBadge(tab.id, "…", "#ca8a04");
+  await safeSendToTab(tab.id, {
+    type: MESSAGE.ENABLE_OVERLAY,
+    youtubeUrl: tab.url
+  });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") return false;
 
   if (message.type === MESSAGE.CONTENT_READY && sender.tab?.id) {
-    void getActiveCapture().then((active) => {
+    void getActiveOverlay().then((active) => {
       if (active?.tabId === sender.tab.id) {
         return safeSendToTab(sender.tab.id, {
           type: MESSAGE.ENABLE_OVERLAY,
-          state: active.state
+          youtubeUrl: sender.tab.url || sender.url
         });
       }
     });
     return false;
   }
 
-  if (message.type === MESSAGE.RESET_ANALYSIS && sender.tab?.id) {
-    void getActiveCapture().then((active) => {
-      if (active?.tabId === sender.tab.id) {
-        return chrome.runtime.sendMessage({
-          target: "offscreen",
-          type: MESSAGE.RESET_ANALYSIS,
-          tabId: sender.tab.id,
-          youtubeUrl: message.youtubeUrl
-        });
-      }
-    });
-    return false;
-  }
-
-  if (message.source !== "offscreen") return false;
-  if (message.type === MESSAGE.CAPTURE_READY) {
-    void markReady(message.tabId).then(() => sendResponse?.({ ok: true }));
+  if (message.type === MESSAGE.START_ANALYSIS && sender.tab?.id) {
+    void handleStartAnalysis(sender.tab.id, message).then(sendResponse);
     return true;
   }
-  if (message.type === MESSAGE.BEAT_STATE) {
-    void safeSendToTab(message.tabId, message);
-  } else if (message.type === MESSAGE.ANALYSIS_STATE) {
-    void showAnalysisState(message.tabId, message.status);
-    void safeSendToTab(message.tabId, message);
-  } else if (message.type === MESSAGE.CHOREOGRAPHY_READY) {
-    void safeSendToTab(message.tabId, message);
-  } else if (message.type === MESSAGE.CAPTURE_ENDED) {
-    void finishCapture(message.tabId, message.reason ?? "ended");
-  } else if (message.type === MESSAGE.ERROR) {
-    void handleError(message.tabId, message.message ?? message.code);
+
+  if (message.type === MESSAGE.GET_ANALYSIS && sender.tab?.id) {
+    void handleGetAnalysis(sender.tab.id, message.jobId).then(sendResponse);
+    return true;
   }
-  sendResponse?.({ ok: true });
+
+  if (message.type === MESSAGE.ANALYSIS_STATE && sender.tab?.id) {
+    void updateAnalysisState(sender.tab.id, message.status);
+    return false;
+  }
+
   return false;
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  void getActiveCapture().then((active) => {
-    if (active?.tabId === tabId) return stopCapture(tabId, "tab-closed");
+  void getActiveOverlay().then((active) => {
+    if (active?.tabId === tabId) return clearActiveOverlay(tabId);
   });
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (!changeInfo.url || isYouTubeUrl(changeInfo.url)) return;
-  void getActiveCapture().then((active) => {
-    if (active?.tabId === tabId) return stopCapture(tabId, "left-youtube");
+  if (!changeInfo.url || isYouTubeWatchUrl(changeInfo.url)) return;
+  void getActiveOverlay().then((active) => {
+    if (active?.tabId === tabId) return disableOverlay(tabId, "left-watch-page");
   });
 });
 
-async function ensureOffscreenDocument() {
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-    documentUrls: [chrome.runtime.getURL("offscreen.html")]
-  });
-  if (contexts.length) return;
-  await chrome.offscreen.createDocument({
-    url: "offscreen.html",
-    reasons: ["USER_MEDIA"],
-    justification: "Локальный real-time анализ ритма аудио вкладки YouTube"
-  });
-}
-
-async function markReady(tabId) {
-  const active = await getActiveCapture();
-  if (active?.tabId !== tabId) return;
-  await chrome.storage.session.set({ [SESSION_KEY]: { tabId, state: "listening" } });
-  await setBadge(tabId, "ON", "#15803d");
-  await safeSendToTab(tabId, { type: MESSAGE.ENABLE_OVERLAY, state: "listening" });
-}
-
-async function showAnalysisState(tabId, status) {
-  if (status === "complete") {
-    await setBadge(tabId, "MAP", "#7c3aed");
-  } else if (status === "unavailable") {
-    await setBadge(tabId, "RT", "#475569");
-  } else {
-    await setBadge(tabId, "AI…", "#ca8a04");
+async function handleStartAnalysis(tabId, message) {
+  if (!(await isActiveTab(tabId)) || !isYouTubeWatchUrl(message.youtubeUrl)) {
+    return { ok: false, error: "Analysis is allowed only for the active YouTube video" };
   }
+  return requestJson(`${API_ORIGIN}/v1/analysis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      youtubeUrl: message.youtubeUrl,
+      assetId: message.assetId || "three-cats"
+    })
+  });
 }
 
-async function stopCapture(tabId, reason) {
+async function handleGetAnalysis(tabId, jobId) {
+  if (!(await isActiveTab(tabId)) || !/^[a-f0-9]{32}$/.test(String(jobId || ""))) {
+    return { ok: false, error: "Invalid or inactive analysis job" };
+  }
+  const result = await requestJson(`${API_ORIGIN}/v1/analysis/${encodeURIComponent(jobId)}`);
+  if (!result.ok || result.data.status !== "complete") return result;
+  if (!isLocalMapUrl(result.data.mapUrl)) {
+    return { ok: false, error: "Backend returned an invalid choreography URL" };
+  }
+  const map = await requestJson(result.data.mapUrl);
+  if (!map.ok) return map;
+  return { ok: true, data: { ...result.data, choreography: map.data } };
+}
+
+async function requestJson(url, options = {}) {
   try {
-    await chrome.runtime.sendMessage({
-      target: "offscreen",
-      type: MESSAGE.STOP_CAPTURE,
-      tabId,
-      reason
-    });
-  } catch {
-    // The offscreen document may already be gone.
+    const response = await fetch(url, options);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: payload?.detail || `Local backend returned HTTP ${response.status}`
+      };
+    }
+    return { ok: true, data: payload };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
-  await finishCapture(tabId, reason);
 }
 
-async function finishCapture(tabId, reason) {
-  const active = await getActiveCapture();
-  if (active?.tabId === tabId) await chrome.storage.session.remove(SESSION_KEY);
-  await setBadge(tabId, "", "#15803d");
+async function updateAnalysisState(tabId, status) {
+  if (!(await isActiveTab(tabId))) return;
+  if (status === "ready") {
+    await chrome.storage.session.set({
+      [SESSION_KEY]: { tabId, state: "ready" }
+    });
+    await setBadge(tabId, "ON", "#15803d");
+  } else if (status === "error") {
+    await chrome.storage.session.set({
+      [SESSION_KEY]: { tabId, state: "error" }
+    });
+    await setBadge(tabId, "!", "#b91c1c");
+  } else {
+    await setBadge(tabId, "…", "#ca8a04");
+  }
+}
+
+async function disableOverlay(tabId, reason) {
+  await clearActiveOverlay(tabId);
   await safeSendToTab(tabId, { type: MESSAGE.DISABLE_OVERLAY, reason });
 }
 
-async function handleError(tabId, error) {
-  const message = error instanceof Error ? error.message : String(error ?? "Unknown error");
-  await chrome.storage.session.remove(SESSION_KEY);
-  await setBadge(tabId, "!", "#b91c1c");
-  await safeSendToTab(tabId, { type: MESSAGE.ERROR, message });
+async function clearActiveOverlay(tabId) {
+  const active = await getActiveOverlay();
+  if (active?.tabId === tabId) await chrome.storage.session.remove(SESSION_KEY);
+  await setBadge(tabId, "", "#15803d");
 }
 
-async function getActiveCapture() {
+async function isActiveTab(tabId) {
+  const active = await getActiveOverlay();
+  return active?.tabId === tabId;
+}
+
+async function getActiveOverlay() {
   const data = await chrome.storage.session.get(SESSION_KEY);
   return data[SESSION_KEY] ?? null;
 }
@@ -183,7 +168,7 @@ async function safeSendToTab(tabId, message) {
   try {
     await chrome.tabs.sendMessage(tabId, message);
   } catch {
-    // Content scripts are unavailable on internal/error pages.
+    // The content script can disappear during navigation.
   }
 }
 
@@ -193,10 +178,24 @@ async function setBadge(tabId, text, color) {
   if (text) await chrome.action.setBadgeBackgroundColor({ tabId, color });
 }
 
-function isYouTubeUrl(rawUrl) {
+function isYouTubeWatchUrl(rawUrl) {
   try {
     const url = new URL(rawUrl);
-    return url.protocol === "https:" && url.hostname === "www.youtube.com";
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "www.youtube.com" &&
+      url.pathname === "/watch" &&
+      /^[A-Za-z0-9_-]{11}$/.test(url.searchParams.get("v") || "")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isLocalMapUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return url.origin === API_ORIGIN && url.pathname.startsWith("/v1/maps/");
   } catch {
     return false;
   }
