@@ -48,7 +48,9 @@ def main() -> None:
     permissions = set(manifest.get("permissions", []))
     if permissions != ALLOWED_PERMISSIONS:
         fail(f"unexpected permissions: {sorted(permissions ^ ALLOWED_PERMISSIONS)}")
-    expected_hosts = {"https://www.youtube.com/watch*", "http://127.0.0.1:8765/*"}
+    # The content script must survive YouTube's SPA navigation from another
+    # youtube.com page; executable code still gates activation to /watch.
+    expected_hosts = {"https://www.youtube.com/*", "http://127.0.0.1:8765/*"}
     if set(manifest.get("host_permissions", [])) != expected_hosts:
         fail("host permissions must remain restricted to YouTube and the local analyzer")
     if manifest.get("action", {}).get("default_popup"):
@@ -125,9 +127,36 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
     if float(motion_map.get("nativeBpm", 0)) <= 0:
         fail(f"nativeBpm must be positive for {asset_id}")
 
+    raw_exclusions = motion_map.get("excludedRanges", [])
+    if not isinstance(raw_exclusions, list):
+        fail(f"excludedRanges must be an array for {asset_id}")
+    exclusions = []
+    duration = float(motion_map.get("duration", 0))
+    for excluded in raw_exclusions:
+        if not isinstance(excluded, dict):
+            fail(f"excludedRanges entries must be objects for {asset_id}")
+        start = float(excluded.get("start", -1))
+        end = float(excluded.get("end", -1))
+        if start < 0 or end <= start or end > duration + 0.001:
+            fail(f"invalid excluded source range for {asset_id}")
+        if not excluded.get("reason"):
+            fail(f"excluded source range needs a reason for {asset_id}")
+        exclusions.append((start, end))
+    exclusions.sort()
+    for previous, current in zip(exclusions, exclusions[1:]):
+        if current[0] < previous[1] - 0.001:
+            fail(f"overlapping excluded source ranges for {asset_id}")
+
+    def is_declared_gap(start: float, end: float) -> bool:
+        return any(
+            abs(excluded_start - start) <= 0.001
+            and abs(excluded_end - end) <= 0.001
+            for excluded_start, excluded_end in exclusions
+        )
+
     total_beats = 0
     previous_end = 0.0
-    duration = float(motion_map.get("duration", 0))
+    observed_gaps = []
     for segment in segments:
         start = float(segment.get("sourceStart", -1))
         end = float(segment.get("sourceEnd", -1))
@@ -136,8 +165,12 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
         next_ids = segment.get("next")
         tempo_range = segment.get("tempoRange")
         affinities = segment.get("sectionAffinity")
-        if abs(start - previous_end) > 0.001 or end <= start or end > duration + 0.001:
-            fail(f"non-contiguous source range in {asset_id}/{segment.get('id')}")
+        if start < previous_end - 0.001 or end <= start or end > duration + 0.001:
+            fail(f"invalid source range in {asset_id}/{segment.get('id')}")
+        if start > previous_end + 0.001:
+            if not is_declared_gap(previous_end, start):
+                fail(f"undeclared source gap in {asset_id}/{segment.get('id')}")
+            observed_gaps.append((previous_end, start))
         if beats <= 0:
             fail(f"beats must be positive in {asset_id}/{segment.get('id')}")
         if not 0 <= energy <= 1:
@@ -169,8 +202,12 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
 
     if total_beats != motion_map.get("phraseBeats"):
         fail(f"phraseBeats mismatch for {asset_id}")
-    if abs(previous_end - duration) > 0.001:
-        fail(f"motion map does not cover complete video for {asset_id}")
+    if previous_end < duration - 0.001:
+        if not is_declared_gap(previous_end, duration):
+            fail(f"motion map does not cover complete video for {asset_id}")
+        observed_gaps.append((previous_end, duration))
+    if len(observed_gaps) != len(exclusions):
+        fail(f"unused excluded source range for {asset_id}")
     reachable = {segments[0]["id"]}
     while True:
         expanded = reachable | {

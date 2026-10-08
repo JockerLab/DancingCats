@@ -1,6 +1,6 @@
 # Dancing Cats local backend
 
-Локальный HTTP-сервис получает публичный YouTube URL, временно извлекает аудио, анализирует всю композицию через All-In-One и сохраняет только `choreography-map.json`. Исходное аудио удаляется после каждого задания.
+Локальный HTTP-сервис получает публичный YouTube URL, временно извлекает аудио, определяет ритм через `Beat This! small0`, строит приближённую структуру композиции и сохраняет только `choreography-map.json`. Исходное аудио удаляется после каждого задания.
 
 Сервис слушает только `127.0.0.1:8765`. Максимальная длительность по умолчанию — 15 минут.
 
@@ -81,15 +81,15 @@ docker info
 
 Группа `docker` фактически предоставляет root-доступ к машине. Не используйте `sudo chmod 666 /var/run/docker.sock`.
 
-При первом запуске All-In-One скачивает веса Harmonix и Demucs из исходных хранилищ. Они не входят в Docker image. Каталог `backend/models` подключён к `/models`, поэтому повторный запуск контейнера не загружает веса заново.
+При первом запуске Beat This! скачивает checkpoint `small0` размером около 8 МБ из хранилища авторов. Он не входит в Docker image. Каталог `backend/models` подключён к `/models`, поэтому повторный запуск контейнера не загружает веса заново.
 
-Backend начинает warm-up Harmonix сразу после старта. По умолчанию используется одна модель `harmonix-fold0` вместо ансамбля из восьми моделей `harmonix-all`. Если библиотека предоставляет `AllInOneSession`, загруженная модель и Demucs session переиспользуются следующими заданиями. Warm-up выполняется отдельно, поэтому скачивание YouTube audio может идти параллельно загрузке модели.
+Backend начинает warm-up rhythm-модели сразу после старта и переиспользует её для следующих заданий. Warm-up выполняется отдельно, поэтому скачивание YouTube audio может идти параллельно загрузке модели. Demucs и All-In-One больше не используются.
 
-Логи содержат отдельные времена download/FFmpeg, inference и planner. Одновременно выполняется только один ML-job: параллельный запуск нескольких Demucs на CPU обычно увеличивает задержку и расход RAM.
+Логи содержат отдельные времена download/FFmpeg, rhythm inference, структурного анализа и planner. Одновременно выполняется только один ML-job, чтобы анализы не конкурировали за CPU и RAM.
 
 ## Локальная установка
 
-Backend использует совместимую inference-сборку исходного All-In-One с теми же Harmonix-моделями и форматом результата. Для воспроизводимости рекомендуется Python 3.10–3.11.
+Backend использует `Beat This!` без DBN-постобработки и `librosa`. Для воспроизводимости рекомендуется Python 3.10–3.11.
 
 ```bash
 cd backend
@@ -113,7 +113,7 @@ curl -X POST http://127.0.0.1:8765/v1/analysis \
   -d '{"youtubeUrl":"https://www.youtube.com/watch?v=VIDEO_ID","assetId":"three-cats"}'
 ```
 
-Ответ содержит `jobId`. Состояние проверяется через `GET /v1/analysis/{jobId}`. После завершения поле `mapUrl` указывает на готовую карту.
+Ответ содержит `jobId`, общий `status` и подробный `stage`: `queued`, `downloading`, `analyzing`, `planning`, `cached`, `complete` или `error`. Состояние проверяется через `GET /v1/analysis/{jobId}`. После завершения поле `mapUrl` указывает на готовую карту. Переходы `status/stage` также записываются в Docker-лог.
 
 Swagger UI доступен на `http://127.0.0.1:8765/docs`.
 
@@ -124,6 +124,6 @@ Swagger UI доступен на `http://127.0.0.1:8765/docs`.
 - `DANCING_CATS_DATA_DIR` — каталог JSON-кеша;
 - `DANCING_CATS_ASSETS_DIR` — каталог с `catalog.json` и motion maps;
 - `DANCING_CATS_MAX_DURATION` — лимит видео в секундах, по умолчанию 900.
-- `DANCING_CATS_ANALYZER_MODEL` — All-In-One model, по умолчанию `harmonix-fold0`; для исходного тяжёлого ансамбля задайте `harmonix-all`.
+- `DANCING_CATS_RHYTHM_MODEL` — checkpoint Beat This!, по умолчанию `small0`.
 
 Не выставляйте сервис в публичную сеть. Он предназначен только для персональной локальной работы и принимает только HTTPS URL `youtube.com`/`youtu.be` без cookies и плейлистов.

@@ -26,14 +26,16 @@ assets/
 - `duration` — точная длительность;
 - `nativeBpm` — естественный темп;
 - `phraseBeats` — суммарная длина segments;
-- `segments` — непрерывное покрытие исходного WebM.
+- `segments` — покрытие используемых диапазонов исходного WebM;
+- `excludedRanges` — необязательные интервалы с дефектными кадрами, которые
+  намеренно пропускаются (для каждого интервала обязательно указывается причина).
 
 Каждый segment содержит:
 
 - `sourceStart`, `sourceEnd`, `beats`;
 - `energy`, `intensity`, `fluidity` в диапазоне `0..1`;
 - `tempoRange: [minBpm, maxBpm]`;
-- `sectionAffinity` — подходящие labels All-In-One;
+- `sectionAffinity` — подходящие функциональные labels облегчённого анализатора;
 - `tags` — смысловые признаки движения;
 - `entryPose`, `exitPose`;
 - `hardCutSafe` — разрешён ли произвольный резкий вход;

@@ -43,7 +43,7 @@ def build_choreography(
 ) -> dict[str, Any]:
     beats = analysis.beats
     if len(beats) < 9:
-        raise RuntimeError("All-In-One found too few beats to build choreography")
+        raise RuntimeError("Rhythm analyzer found too few beats to build choreography")
     segments = {segment["id"]: segment for segment in motion_map["segments"]}
     start_index = _first_downbeat_index(analysis)
     states: dict[tuple[int, str, int], PlannedCue] = {}
@@ -120,6 +120,7 @@ def build_choreography(
             "playbackRate": round((segment["sourceEnd"] - segment["sourceStart"]) / (end - start), 5),
             "repeatIndex": cue.repeat_count,
             "section": _section_at(analysis, start),
+            "musicProfile": _music_profile_at(analysis, start),
             "motionProfile": {
                 "intensity": float(segment.get("intensity", segment["energy"])),
                 "fluidity": float(segment.get("fluidity", 0.5)),
@@ -135,7 +136,7 @@ def build_choreography(
         "duration": analysis.duration,
         "assetId": motion_map["id"],
         "assetVersion": asset_version,
-        "analyzer": "all-in-one",
+        "analyzer": "beat-this+lightweight-structure",
         "song": analysis.to_dict(),
         "cues": cues,
     }
@@ -158,12 +159,22 @@ def _candidate(
         return None
     source_duration = float(segment["sourceEnd"]) - float(segment["sourceStart"])
     rate = source_duration / music_duration
-    energy = _energy_at(analysis, analysis.beats[start_index])
-    cost = base_cost + abs(float(segment["energy"]) - energy) * 4
-    cost += abs(float(segment.get("intensity", segment["energy"])) - energy) * 1.25
+    profile = _music_profile_at(analysis, analysis.beats[start_index])
+    energy = float(profile["energy"])
+    dynamics = float(profile["dynamics"])
+    onset_density = float(profile["onsetDensity"])
+    target_intensity = min(1, max(0, energy * 0.55 + dynamics * 0.25 + onset_density * 0.2))
+    cost = base_cost + abs(float(segment["energy"]) - energy) * 2.5
+    cost += abs(float(segment.get("intensity", segment["energy"])) - target_intensity) * 2.25
     target_fluidity = min(
         0.95,
-        max(0.15, 0.9 - energy * 0.55 - max(0, analysis.bpm - 100) / 250),
+        max(
+            0.15,
+            0.95
+            - dynamics * 0.42
+            - onset_density * 0.28
+            - max(0, analysis.bpm - 100) / 300,
+        ),
     )
     cost += abs(float(segment.get("fluidity", 0.5)) - target_fluidity) * 0.8
     tempo_min, tempo_max = segment.get("tempoRange", [0, float("inf")])
@@ -175,9 +186,16 @@ def _candidate(
     affinities = segment.get("sectionAffinity", [])
     if affinities and section not in affinities:
         cost += 0.45
+    tags = set(segment.get("tags", []))
+    if profile["trend"] == "rising" and "rise" in tags:
+        cost -= 0.18
+    elif profile["trend"] == "falling" and "smooth" in tags:
+        cost -= 0.12
+    if onset_density >= 0.72 and "accent" in tags:
+        cost -= 0.16
     cost += abs(math.log(max(rate, 1e-6))) * 0.35
-    if rate < 0.55 or rate > 1.8:
-        cost += 25 + abs(rate - min(1.8, max(0.55, rate))) * 10
+    if rate < 0.25 or rate > 4:
+        cost += 25 + abs(rate - min(4, max(0.25, rate))) * 10
     if previous:
         if previous.get("exitPose") != segment.get("entryPose"):
             cost += 0.08
@@ -198,11 +216,33 @@ def _first_downbeat_index(analysis: SongAnalysis) -> int:
     return 0
 
 
-def _energy_at(analysis: SongAnalysis, time: float) -> float:
+def _music_profile_at(analysis: SongAnalysis, time: float) -> dict[str, float | str]:
+    for bar in analysis.bars or []:
+        if bar.start <= time < bar.end:
+            return {
+                "energy": bar.energy,
+                "dynamics": bar.dynamics,
+                "onsetDensity": bar.onset_density,
+                "spectralChange": bar.spectral_change,
+                "trend": bar.trend,
+            }
     for segment in analysis.segments:
         if segment.start <= time < segment.end:
-            return segment.energy
-    return analysis.segments[-1].energy
+            return {
+                "energy": segment.energy,
+                "dynamics": segment.dynamics,
+                "onsetDensity": segment.onset_density,
+                "spectralChange": segment.spectral_change,
+                "trend": segment.trend,
+            }
+    segment = analysis.segments[-1]
+    return {
+        "energy": segment.energy,
+        "dynamics": segment.dynamics,
+        "onsetDensity": segment.onset_density,
+        "spectralChange": segment.spectral_change,
+        "trend": segment.trend,
+    }
 
 
 def _section_at(analysis: SongAnalysis, time: float) -> str:

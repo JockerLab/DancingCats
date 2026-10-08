@@ -4,6 +4,10 @@
   const { MESSAGE, DEFAULT_LAYOUT, clamp, sanitizeLayout } = DancingCatsShared;
   const LAYOUT_KEY = "layout";
   const POLL_INTERVAL_MS = 1000;
+  const MIN_PLAYBACK_RATE = 0.25;
+  const MAX_PLAYBACK_RATE = 4;
+  const HARD_SEEK_THRESHOLD_SECONDS = 0.35;
+  const FRAME_TOLERANCE_SECONDS = 1 / 30;
 
   class DancingCatsController {
     constructor() {
@@ -27,8 +31,12 @@
       this.analysisToken = 0;
       this.animationFrame = null;
       this.attachScheduled = false;
+      this.visualState = { kind: "loading", stage: "queued", message: "" };
       this.observer = new MutationObserver(() => this.scheduleAttach());
-      this.layoutPromise = this.loadLayout();
+      this.layoutPromise = this.loadLayout().catch(() => {
+        this.layout = { ...DEFAULT_LAYOUT };
+        this.applyLayout();
+      });
     }
 
     async loadLayout() {
@@ -46,9 +54,11 @@
         this.enabled = true;
         this.observer.observe(document.documentElement, { childList: true, subtree: true });
         window.addEventListener("yt-navigate-finish", this.onYouTubeNavigate);
-        await this.layoutPromise;
+        this.showLoading("queued");
         this.attach();
         this.animationFrame = requestAnimationFrame(this.animate);
+        await this.layoutPromise;
+        this.attach();
       }
       if (this.analysisUrl !== youtubeUrl || !this.choreography) {
         void this.startAnalysis(youtubeUrl);
@@ -83,7 +93,7 @@
       this.choreography = null;
       this.lastCueIndex = null;
       this.assetReady = false;
-      this.showLoading();
+      this.showLoading("queued");
       this.reportState("loading");
 
       try {
@@ -94,6 +104,7 @@
         });
         if (!response?.ok) throw new Error(response?.error || "Не удалось запустить анализ");
         let job = response.data;
+        this.showLoading(job.stage || job.status);
 
         while (job.status === "queued" || job.status === "running") {
           await delay(POLL_INTERVAL_MS);
@@ -104,6 +115,7 @@
           });
           if (!response?.ok) throw new Error(response?.error || "Не удалось получить анализ");
           job = response.data;
+          this.showLoading(job.stage || job.status);
         }
 
         if (job.status === "complete" && !job.choreography) {
@@ -120,6 +132,7 @@
           throw new Error(job.error || "Backend не сформировал хореографию");
         }
 
+        this.showLoading("asset");
         const resources = await this.loadAssetResources(job.choreography.assetId);
         if (!this.isCurrentAnalysis(token)) return;
         this.motionMap = resources.motionMap;
@@ -270,37 +283,45 @@
         this.showError(`Ошибка декодирования видеоассета${code ? ` (${code})` : ""}`);
         this.reportState("error");
       });
+      this.catVideo.addEventListener("seeked", () => this.renderCurrentFrame());
       this.installDragging();
       this.installResizing(this.resizeHandle);
       this.applyLayout();
-      this.showLoading();
+      this.applyVisualState();
     }
 
-    showLoading() {
-      if (this.catVideo) this.catVideo.hidden = true;
-      if (this.spinner) this.spinner.hidden = false;
-      if (this.errorMark) this.errorMark.hidden = true;
-      if (this.resizeHandle) this.resizeHandle.hidden = true;
+    showLoading(stage = "queued") {
+      this.visualState = { kind: "loading", stage, message: "" };
+      this.applyVisualState();
     }
 
     showReady() {
-      if (this.catVideo) this.catVideo.hidden = false;
-      if (this.spinner) this.spinner.hidden = true;
-      if (this.errorMark) this.errorMark.hidden = true;
-      if (this.resizeHandle) this.resizeHandle.hidden = false;
+      this.visualState = { kind: "ready", stage: "complete", message: "" };
+      this.applyVisualState();
     }
 
     showError(message) {
+      this.visualState = { kind: "error", stage: "error", message: message || "Ошибка" };
+      this.applyVisualState();
+    }
+
+    applyVisualState() {
+      const { kind, stage, message } = this.visualState;
       if (this.catVideo) {
-        this.catVideo.pause();
-        this.catVideo.hidden = true;
+        if (kind !== "ready") this.catVideo.pause();
+        this.catVideo.hidden = kind !== "ready";
       }
-      if (this.spinner) this.spinner.hidden = true;
+      if (this.spinner) {
+        const label = loadingStageLabel(stage);
+        this.spinner.hidden = kind !== "loading";
+        this.spinner.title = label;
+        this.spinner.setAttribute("aria-label", label);
+      }
       if (this.errorMark) {
-        this.errorMark.hidden = false;
-        this.errorMark.title = message || "Ошибка";
+        this.errorMark.hidden = kind !== "error";
+        this.errorMark.title = message;
       }
-      if (this.resizeHandle) this.resizeHandle.hidden = true;
+      if (this.resizeHandle) this.resizeHandle.hidden = kind !== "ready";
     }
 
     reportState(status) {
@@ -328,18 +349,29 @@
       const limit = Math.max(0, Number(this.motionMap.duration) - 1 / 30);
       const desiredTime = clamp(sample.sourceTime, 0, limit);
       const error = desiredTime - this.catVideo.currentTime;
-      if (sample.cueChanged || Math.abs(error) > 0.12 || this.mainVideo.seeking) {
+      if (this.catVideo.seeking) return;
+      const transitionNeedsSeek = sample.cueChanged
+        && Math.abs(error) > FRAME_TOLERANCE_SECONDS;
+      const mainSeekNeedsSync = this.mainVideo.seeking
+        && Math.abs(error) > FRAME_TOLERANCE_SECONDS;
+      if (
+        transitionNeedsSeek
+        || mainSeekNeedsSync
+        || Math.abs(error) > HARD_SEEK_THRESHOLD_SECONDS
+      ) {
+        this.catVideo.pause();
         this.catVideo.currentTime = desiredTime;
+        return;
       }
       if (!sample.active) {
         this.catVideo.pause();
         return;
       }
-      const correction = clamp(1 + error * 0.1, 0.96, 1.04);
+      const correction = clamp(1 + error * 0.12, 0.94, 1.06);
       this.catVideo.playbackRate = clamp(
         sample.playbackRate * this.mainVideo.playbackRate * correction,
-        0.55,
-        1.8
+        MIN_PLAYBACK_RATE,
+        MAX_PLAYBACK_RATE
       );
       this.playCatVideo();
     }
@@ -383,7 +415,14 @@
     }
 
     playCatVideo() {
-      if (!this.catVideo || !this.assetReady || this.mainVideo?.paused) return;
+      if (
+        !this.catVideo
+        || !this.assetReady
+        || this.mainVideo?.paused
+        || this.mainVideo?.seeking
+        || this.catVideo.seeking
+        || !this.catVideo.paused
+      ) return;
       this.catVideo.play().catch((error) => {
         if (error?.name === "AbortError") return;
         this.showError(error instanceof Error ? error.message : String(error));
@@ -533,6 +572,18 @@
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 
+  function loadingStageLabel(stage) {
+    return ({
+      queued: "Анализ ожидает запуска",
+      downloading: "Загрузка аудио",
+      analyzing: "Анализ музыки",
+      planning: "Построение хореографии",
+      cached: "Загрузка готовой хореографии",
+      complete: "Загрузка готовой хореографии",
+      asset: "Загрузка видео с котами"
+    })[stage] || "Загрузка хореографии";
+  }
+
   function isYouTubeWatchUrl(rawUrl) {
     try {
       const url = new URL(rawUrl);
@@ -567,6 +618,7 @@
     .spinner {
       width: 46px; height: 46px; margin: 16px auto; border: 5px solid #ffffff44;
       border-top-color: #fff; border-radius: 50%; animation: spin 800ms linear infinite;
+      background: #0005; box-shadow: 0 0 0 3px #0006, 0 2px 8px #000b;
       filter: drop-shadow(0 2px 3px #0008); pointer-events: none;
     }
     .error-mark {

@@ -6,11 +6,18 @@
   "duration": 11.8,
   "nativeBpm": 122.0339,
   "phraseBeats": 24,
+  "excludedRanges": [
+    {
+      "start": 1.8,
+      "end": 1.92,
+      "reason": "isolated-paw-twitch"
+    }
+  ],
   "segments": [
     {
       "id": "front-flow-a",
       "sourceStart": 0.0,
-      "sourceEnd": 1.92,
+      "sourceEnd": 1.8,
       "beats": 4,
       "energy": 0.48,
       "intensity": 0.42,

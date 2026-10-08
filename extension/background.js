@@ -3,6 +3,7 @@ importScripts("shared.js");
 const { MESSAGE } = DancingCatsShared;
 const SESSION_KEY = "activeOverlay";
 const API_ORIGIN = "http://127.0.0.1:8765";
+const loggedJobStates = new Map();
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.storage.session.remove([SESSION_KEY, "activeCapture"]);
@@ -82,7 +83,7 @@ async function handleStartAnalysis(tabId, message) {
   if (!(await isActiveTab(tabId)) || !isYouTubeWatchUrl(message.youtubeUrl)) {
     return { ok: false, error: "Analysis is allowed only for the active YouTube video" };
   }
-  return requestJson(`${API_ORIGIN}/v1/analysis`, {
+  const result = await requestJson(`${API_ORIGIN}/v1/analysis`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -90,6 +91,8 @@ async function handleStartAnalysis(tabId, message) {
       assetId: message.assetId || "three-cats"
     })
   });
+  logJobStatus(result);
+  return result;
 }
 
 async function handleGetAnalysis(tabId, jobId) {
@@ -97,6 +100,7 @@ async function handleGetAnalysis(tabId, jobId) {
     return { ok: false, error: "Invalid or inactive analysis job" };
   }
   const result = await requestJson(`${API_ORIGIN}/v1/analysis/${encodeURIComponent(jobId)}`);
+  logJobStatus(result);
   if (!result.ok || result.data.status !== "complete") return result;
   if (!isLocalMapUrl(result.data.mapUrl)) {
     return { ok: false, error: "Backend returned an invalid choreography URL" };
@@ -104,6 +108,17 @@ async function handleGetAnalysis(tabId, jobId) {
   const map = await requestJson(result.data.mapUrl);
   if (!map.ok) return map;
   return { ok: true, data: { ...result.data, choreography: map.data } };
+}
+
+function logJobStatus(result) {
+  if (!result?.ok || !result.data?.jobId) return;
+  const job = result.data;
+  const current = `${job.status}/${job.stage || job.status}`;
+  if (loggedJobStates.get(job.jobId) === current) return;
+  loggedJobStates.set(job.jobId, current);
+  console.info(
+    `[Dancing Cats] job=${job.jobId} status=${job.status} stage=${job.stage || job.status}`
+  );
 }
 
 async function requestJson(url, options = {}) {

@@ -24,7 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Dancing Cats local analyzer",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=lifespan,
     )
     app.state.settings = active_settings
@@ -74,6 +74,7 @@ def _job_response(job: Job, request: Request) -> JobResponse:
     return JobResponse(
         jobId=job.job_id,
         status=job.status,
+        stage=job.stage,
         videoId=job.video_id,
         mapUrl=map_url,
         error=job.error,

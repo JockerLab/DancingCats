@@ -42,6 +42,8 @@ class ChoreographyTests(unittest.TestCase):
         self.assertEqual(result["cues"][0]["end"], result["cues"][1]["start"])
         self.assertNotIn("scale", result["cues"][0])
         self.assertNotIn("mirror", result["cues"][0])
+        self.assertIn("musicProfile", result["cues"][0])
+        self.assertIn("onsetDensity", result["cues"][0]["musicProfile"])
         self.assertIn("motionProfile", result["cues"][0])
         self.assertEqual({cue["segmentId"] for cue in result["cues"]}, {"a", "b"})
 

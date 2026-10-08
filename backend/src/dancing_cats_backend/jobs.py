@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from .analyzer import analyze_with_all_in_one, analyzer_model_name, warm_up_analyzer
+from .analyzer import analyze_music, analyzer_model_name, warm_up_analyzer
 from .choreography import build_choreography, load_motion_map
 from .config import Settings
 from .youtube import download_audio, extract_video_id
@@ -26,6 +26,7 @@ class Job:
     video_id: str
     cache_key: str
     status: str = "queued"
+    stage: str = "queued"
     error: str | None = None
 
 
@@ -43,19 +44,37 @@ class JobManager:
         video_id = extract_video_id(youtube_url)
         motion_map, asset_version = load_motion_map(self.settings.assets_dir, asset_id)
         cache_key = hashlib.sha256(
-            f"{video_id}:{asset_id}:{asset_version}:{analyzer_model_name()}:planner-v3".encode()
+            f"{video_id}:{asset_id}:{asset_version}:{analyzer_model_name()}:planner-v4".encode()
         ).hexdigest()[:24]
         with self.lock:
             active_id = self.active_by_key.get(cache_key)
             if active_id and self.jobs[active_id].status in {"queued", "running"}:
-                return self.jobs[active_id]
+                active = self.jobs[active_id]
+                LOGGER.info(
+                    "Reusing analysis job %s for video %s: status=%s stage=%s",
+                    active.job_id,
+                    active.video_id,
+                    active.status,
+                    active.stage,
+                )
+                return active
             job = Job(job_id=uuid.uuid4().hex, video_id=video_id, cache_key=cache_key)
             if self.map_path(cache_key).is_file() and not force:
                 job.status = "complete"
-                LOGGER.info("Using cached choreography for video %s", video_id)
+                job.stage = "cached"
+                LOGGER.info(
+                    "Analysis job %s for video %s: status=complete stage=cached",
+                    job.job_id,
+                    video_id,
+                )
             self.jobs[job.job_id] = job
             if job.status != "complete":
                 self.active_by_key[cache_key] = job.job_id
+                LOGGER.info(
+                    "Analysis job %s for video %s: status=queued stage=queued",
+                    job.job_id,
+                    video_id,
+                )
                 self.executor.submit(
                     self._run,
                     job.job_id,
@@ -83,7 +102,7 @@ class JobManager:
         motion_map: dict,
         asset_version: str,
     ) -> None:
-        self._set_status(job_id, "running")
+        self._set_status(job_id, "running", stage="downloading")
         job = self.get(job_id)
         if job is None:
             return
@@ -102,14 +121,16 @@ class JobManager:
                     job_id,
                     time.perf_counter() - stage_started_at,
                 )
+                self._set_status(job_id, "running", stage="analyzing")
                 stage_started_at = time.perf_counter()
-                analysis = analyze_with_all_in_one(audio.wav_path)
+                analysis = analyze_music(audio.wav_path)
                 LOGGER.info(
                     "Analysis job %s ran %s inference in %.2fs",
                     job_id,
                     analyzer_model_name(),
                     time.perf_counter() - stage_started_at,
                 )
+                self._set_status(job_id, "running", stage="planning")
                 stage_started_at = time.perf_counter()
                 choreography = build_choreography(
                     analysis,
@@ -130,7 +151,7 @@ class JobManager:
                     job_id,
                     time.perf_counter() - stage_started_at,
                 )
-            self._set_status(job_id, "complete")
+            self._set_status(job_id, "complete", stage="complete")
             LOGGER.info(
                 "Analysis job %s completed with %d choreography cues in %.2fs",
                 job_id,
@@ -139,7 +160,7 @@ class JobManager:
             )
         except Exception as error:
             LOGGER.exception("Analysis job %s failed for video %s", job_id, job.video_id)
-            self._set_status(job_id, "error", _safe_error(error))
+            self._set_status(job_id, "error", stage="error", error=_safe_error(error))
         finally:
             with self.lock:
                 self.active_by_key.pop(job.cache_key, None)
@@ -148,14 +169,31 @@ class JobManager:
         try:
             warm_up_analyzer()
         except Exception:
-            LOGGER.exception("Unable to warm up All-In-One; the first job will retry")
+            LOGGER.exception("Unable to warm up the rhythm analyzer; the first job will retry")
 
-    def _set_status(self, job_id: str, status: str, error: str | None = None) -> None:
+    def _set_status(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        stage: str,
+        error: str | None = None,
+    ) -> None:
         with self.lock:
             job = self.jobs.get(job_id)
             if job:
+                changed = job.status != status or job.stage != stage
                 job.status = status
+                job.stage = stage
                 job.error = error
+                if changed:
+                    LOGGER.info(
+                        "Analysis job %s for video %s: status=%s stage=%s",
+                        job.job_id,
+                        job.video_id,
+                        status,
+                        stage,
+                    )
 
 
 def _safe_error(error: Exception) -> str:

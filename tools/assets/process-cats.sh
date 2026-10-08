@@ -29,6 +29,7 @@ fi
 ffmpeg -hide_banner -y \
   -ss "$start_time" \
   -i "$input_file" \
+  -map_metadata -1 \
   "${duration_args[@]}" \
   -an \
   -vf "chromakey=color=${key_color}:similarity=${similarity}:blend=${blend},despill=type=green:mix=0.7,format=yuva420p" \
@@ -39,6 +40,8 @@ ffmpeg -hide_banner -y \
   -b:v 0 \
   -row-mt 1 \
   -auto-alt-ref 0 \
+  -g 15 \
+  -keyint_min 15 \
   "$output_file"
 
 echo "Created: $output_file"

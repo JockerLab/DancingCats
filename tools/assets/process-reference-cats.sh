@@ -20,6 +20,7 @@ mkdir -p "$(dirname "$output_file")"
 # the empty vertical margins and green background are removed.
 ffmpeg -hide_banner -y \
   -i "$input_file" \
+  -map_metadata -1 \
   -filter_complex "[0:v]fps=30,crop=608:690:0:240,chromakey=color=0x00FF00:similarity=0.14:blend=0.055,despill=type=green:mix=0.75,setpts=PTS-STARTPTS,format=yuva420p[out]" \
   -map "[out]" \
   -an \
@@ -29,6 +30,9 @@ ffmpeg -hide_banner -y \
   -b:v 0 \
   -row-mt 1 \
   -auto-alt-ref 0 \
+  -g 15 \
+  -keyint_min 15 \
+  -force_key_frames "0,1.92,3.9333,5.88,7.8667,9.83" \
   "$output_file"
 
 echo "Created full-length transparent video: $output_file"

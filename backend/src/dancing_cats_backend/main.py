@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import logging
+import sys
+
 import uvicorn
 
 from .app import create_app
 from .config import Settings
 
 
+application_logger = logging.getLogger("dancing_cats_backend")
+application_logger.setLevel(logging.INFO)
+application_logger.propagate = False
+if not application_logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    application_logger.addHandler(handler)
 app = create_app()
 
 

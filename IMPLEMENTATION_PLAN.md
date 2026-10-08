@@ -18,7 +18,7 @@
 ## 2. Пользовательский сценарий
 
 1. Пользователь запускает локальный backend.
-2. Backend поднимает HTTP API и в отдельном потоке начинает warm-up модели.
+2. Backend поднимает HTTP API и в отдельном потоке начинает warm-up небольшой rhythm-модели.
 3. Пользователь открывает обычный YouTube video и нажимает action расширения.
 4. Content script находит `#movie_player video.html5-main-video` и показывает spinner.
 5. Service worker отправляет URL backend.
@@ -77,14 +77,17 @@ Warm-up и скачивание первого audio могут перекрыв
 ### Анализ
 
 1. yt-dlp получает `bestaudio` публичного ролика.
-2. FFmpeg создаёт mono PCM WAV 44,1 кГц.
-3. All-In-One извлекает BPM, beats, downbeats и функциональные секции.
-4. RMS по 0,5-секундным окнам задаёт относительную энергию секций.
-5. Planner сопоставляет музыкальную структуру с motion profiles.
-6. JSON атомарно записывается через временный файл.
-7. Временное аудио удаляется.
+2. FFmpeg создаёт mono PCM WAV 22,05 кГц.
+3. `Beat This! small0` извлекает beats и downbeats непосредственно из исходного микса.
+4. BPM и позиции долей восстанавливаются по beat grid.
+5. `librosa` рассчитывает RMS, onset strength, chroma, MFCC и spectral centroid.
+6. Признаки агрегируются по тактам, а spectral novelty задаёт примерные границы секций.
+7. Похожие секции получают одинаковый `patternId`; эвристический классификатор присваивает приближённые `intro/verse/chorus/bridge/outro` и confidence.
+8. Planner сопоставляет музыкальную структуру с motion profiles.
+9. JSON атомарно записывается через временный файл.
+10. Временное аудио удаляется.
 
-Профиль по умолчанию — `harmonix-fold0`. Его можно заменить через `DANCING_CATS_ANALYZER_MODEL`, в том числе вернуть `harmonix-all` для более тяжёлого ансамбля.
+Профиль по умолчанию — `small0`. Его можно заменить через `DANCING_CATS_RHYTHM_MODEL`. Модель используется только для ритма; функциональные labels являются приближённой интерпретацией повторяемости и динамики.
 
 ## 5. Motion map v2
 
@@ -147,9 +150,9 @@ energy mismatch
 
 ## 8. Дальнейшая оптимизация
 
-1. Измерить реальные времена download, Demucs и Harmonix по новым логам.
-2. Если доминирует Demucs, сравнить качество режима без source separation на тестовом наборе.
-3. Добавить быстрый beat-only pass и позднее уточнение секций, если даже `fold0` остаётся слишком медленным.
+1. Измерить download/FFmpeg, Beat This! inference, feature extraction, segmentation и planner на тестовом наборе.
+2. При необходимости экспортировать `small0` в ONNX и сравнить CPU latency с PyTorch.
+3. Подобрать пороги structural novelty и сходства повторов по ручной разметке нескольких треков.
 4. Добавить отмену backend job при переходе на другое видео.
 5. Перенести mirror/pulse в будущую схему cue effects только после определения правил на backend.
 6. Провести ручную проверку всех `hardCutSafe` и loop boundaries по кадрам; текущая семантическая разметка является первой итерацией.

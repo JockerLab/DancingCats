@@ -18,6 +18,7 @@ cookies.txt
 *.mp4
 
 # Local editor/OS files
+TODO.md
 .DS_Store
 *.swp
 __pycache__/

@@ -16,6 +16,9 @@ class AnalysisRequest(BaseModel):
 class JobResponse(BaseModel):
     job_id: str = Field(alias="jobId")
     status: Literal["queued", "running", "complete", "error"]
+    stage: Literal[
+        "queued", "downloading", "analyzing", "planning", "cached", "complete", "error"
+    ]
     video_id: str = Field(alias="videoId")
     map_url: str | None = Field(default=None, alias="mapUrl")
     error: str | None = None
@@ -25,4 +28,4 @@ class JobResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    analyzer: str = "all-in-one"
+    analyzer: str = "beat-this+lightweight-structure"

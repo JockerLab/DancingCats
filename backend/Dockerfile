@@ -7,9 +7,9 @@ ARG PYTORCH_WHEEL_CHANNEL=cpu
 ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DANCING_CATS_HOST=0.0.0.0 \
+    DANCING_CATS_DATA_DIR=/app/data \
     DANCING_CATS_ASSETS_DIR=/assets \
-    DANCING_CATS_ANALYZER_MODEL=harmonix-fold0 \
-    HF_HOME=/models/huggingface \
+    DANCING_CATS_RHYTHM_MODEL=small0 \
     TORCH_HOME=/models/torch \
     XDG_CACHE_HOME=/models/cache
 
@@ -18,8 +18,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY src ./src
+COPY pyproject.toml ./
 
 # Installing CPU wheels first prevents pip from resolving the multi-gigabyte
 # NVIDIA CUDA dependency set. Override the channel only for a GPU image.
@@ -28,8 +27,20 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       --index-url "https://download.pytorch.org/whl/${PYTORCH_WHEEL_CHANNEL}" \
       torch torchaudio
 
+# Keep the expensive third-party layer independent from application source.
+# This makes regular code-only rebuilds reuse PyTorch and the analyzer stack.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install ".[analysis]"
+    pip install \
+      "fastapi>=0.115,<1" \
+      "pydantic>=2.9,<3" \
+      "uvicorn[standard]>=0.30,<1" \
+      "yt-dlp[default]" \
+      "beat-this>=1.1,<2" \
+      "librosa>=0.10.2,<0.12"
+
+COPY README.md ./
+COPY src ./src
+RUN pip install --no-deps .
 
 EXPOSE 8765
 VOLUME ["/app/data", "/assets", "/models"]
