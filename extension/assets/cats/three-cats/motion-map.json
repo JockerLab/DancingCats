@@ -8,65 +8,47 @@
   "phraseBeats": 24,
   "excludedRanges": [
     {
-      "start": 1.8,
-      "end": 1.92,
-      "reason": "isolated-paw-twitch"
+      "start": 2.9667,
+      "end": 3.1667,
+      "reason": "transition-between-arm-spread-and-paw-waves"
     }
   ],
   "segments": [
     {
-      "id": "front-flow-a",
+      "id": "arms-spread",
       "sourceStart": 0.0,
-      "sourceEnd": 1.8,
-      "beats": 4,
+      "sourceEnd": 2.9667,
+      "beats": 6,
       "energy": 0.48,
-      "intensity": 0.42,
-      "fluidity": 0.86,
-      "tempoRange": [70, 125],
-      "sectionAffinity": ["start", "intro", "verse", "outro"],
-      "tags": ["front", "smooth", "flow"],
+      "intensity": 0.46,
+      "fluidity": 0.8,
+      "tempoRange": [70, 140],
+      "sectionAffinity": ["intro", "verse", "bridge", "outro"],
+      "tags": ["front", "smooth", "sequential", "arms-spread"],
       "entryPose": "front-neutral",
       "exitPose": "front-open",
       "hardCutSafe": true,
-      "loopable": true,
-      "maxConsecutive": 2,
-      "next": ["front-flow-a", "front-flow-b", "side-drive-a"]
-    },
-    {
-      "id": "front-flow-b",
-      "sourceStart": 1.92,
-      "sourceEnd": 3.9333,
-      "beats": 4,
-      "energy": 0.62,
-      "intensity": 0.58,
-      "fluidity": 0.72,
-      "tempoRange": [85, 145],
-      "sectionAffinity": ["verse", "bridge", "chorus"],
-      "tags": ["front", "wave", "medium"],
-      "entryPose": "front-open",
-      "exitPose": "front-lean",
-      "hardCutSafe": false,
       "loopable": false,
       "maxConsecutive": 1,
-      "next": ["side-drive-a", "front-flow-a"]
+      "next": ["paw-waves"]
     },
     {
-      "id": "side-drive-a",
-      "sourceStart": 3.9333,
+      "id": "paw-waves",
+      "sourceStart": 3.1667,
       "sourceEnd": 5.88,
-      "beats": 4,
-      "energy": 0.82,
-      "intensity": 0.84,
-      "fluidity": 0.46,
-      "tempoRange": [110, 180],
+      "beats": 6,
+      "energy": 0.78,
+      "intensity": 0.8,
+      "fluidity": 0.5,
+      "tempoRange": [95, 175],
       "sectionAffinity": ["chorus", "solo", "inst"],
-      "tags": ["side", "dynamic", "accent"],
-      "entryPose": "front-lean",
+      "tags": ["front", "wave", "dynamic", "accent"],
+      "entryPose": "front-open",
       "exitPose": "side-open",
       "hardCutSafe": true,
-      "loopable": true,
-      "maxConsecutive": 3,
-      "next": ["side-drive-a", "side-drive-b", "lift-hit"]
+      "loopable": false,
+      "maxConsecutive": 1,
+      "next": ["side-drive-b", "lift-hit"]
     },
     {
       "id": "side-drive-b",
@@ -84,7 +66,7 @@
       "hardCutSafe": true,
       "loopable": true,
       "maxConsecutive": 3,
-      "next": ["side-drive-b", "lift-rise", "side-drive-a"]
+      "next": ["side-drive-b", "lift-rise", "paw-waves"]
     },
     {
       "id": "lift-rise",
@@ -102,7 +84,7 @@
       "hardCutSafe": false,
       "loopable": false,
       "maxConsecutive": 1,
-      "next": ["lift-hit", "front-flow-a"]
+      "next": ["lift-hit", "arms-spread"]
     },
     {
       "id": "lift-hit",
@@ -120,7 +102,7 @@
       "hardCutSafe": true,
       "loopable": true,
       "maxConsecutive": 2,
-      "next": ["lift-hit", "front-flow-a", "side-drive-a"]
+      "next": ["lift-hit", "arms-spread", "paw-waves"]
     }
   ]
 }

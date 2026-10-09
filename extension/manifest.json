@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Dancing Cats for YouTube",
-  "version": "0.5.0",
+  "version": "0.5.3",
   "description": "Группа танцующих котов поверх YouTube по карте локального backend.",
   "minimum_chrome_version": "116",
   "permissions": ["storage"],

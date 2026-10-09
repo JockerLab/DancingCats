@@ -10,7 +10,7 @@
     ANALYSIS_STATE: "ANALYSIS_STATE"
   });
 
-  const DEFAULT_LAYOUT = Object.freeze({ scale: 0.48, x: 0.5, y: 0.7 });
+  const DEFAULT_LAYOUT = Object.freeze({ scale: 0.48, x: 0.5, y: 0.7, mirrored: false });
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number(value)));
@@ -20,7 +20,8 @@
     return {
       scale: clamp(value.scale ?? DEFAULT_LAYOUT.scale, 0.15, 1),
       x: clamp(value.x ?? DEFAULT_LAYOUT.x, 0.05, 0.95),
-      y: clamp(value.y ?? DEFAULT_LAYOUT.y, 0.05, 0.95)
+      y: clamp(value.y ?? DEFAULT_LAYOUT.y, 0.05, 0.95),
+      mirrored: value.mirrored === true
     };
   }
 

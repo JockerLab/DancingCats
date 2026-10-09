@@ -21,6 +21,7 @@
       this.catVideo = null;
       this.spinner = null;
       this.errorMark = null;
+      this.mirrorButton = null;
       this.resizeHandle = null;
       this.choreography = null;
       this.motionMap = null;
@@ -84,6 +85,7 @@
       this.catVideo = null;
       this.spinner = null;
       this.errorMark = null;
+      this.mirrorButton = null;
       this.resizeHandle = null;
     }
 
@@ -269,6 +271,9 @@
             <video class="cat-video" muted playsinline preload="auto" hidden></video>
             <div class="spinner" role="status" aria-label="Загрузка хореографии"></div>
             <div class="error-mark" role="alert" hidden>!</div>
+            <button class="mirror-button" type="button" hidden
+              title="Отразить котов по вертикали" aria-label="Отразить котов по вертикали"
+              aria-pressed="false">]|[</button>
             <button class="resize-handle" type="button" hidden
               title="Изменить размер" aria-label="Изменить размер"></button>
           </div>
@@ -277,6 +282,7 @@
       this.catVideo = this.shadow.querySelector(".cat-video");
       this.spinner = this.shadow.querySelector(".spinner");
       this.errorMark = this.shadow.querySelector(".error-mark");
+      this.mirrorButton = this.shadow.querySelector(".mirror-button");
       this.resizeHandle = this.shadow.querySelector(".resize-handle");
       this.catVideo.addEventListener("error", () => {
         const code = this.catVideo?.error?.code;
@@ -284,6 +290,7 @@
         this.reportState("error");
       });
       this.catVideo.addEventListener("seeked", () => this.renderCurrentFrame());
+      this.installMirroring(this.mirrorButton);
       this.installDragging();
       this.installResizing(this.resizeHandle);
       this.applyLayout();
@@ -321,6 +328,7 @@
         this.errorMark.hidden = kind !== "error";
         this.errorMark.title = message;
       }
+      if (this.mirrorButton) this.mirrorButton.hidden = kind !== "ready";
       if (this.resizeHandle) this.resizeHandle.hidden = kind !== "ready";
     }
 
@@ -432,7 +440,7 @@
 
     installDragging() {
       this.box.addEventListener("pointerdown", (event) => {
-        if (event.target.closest(".resize-handle") || event.button !== 0) return;
+        if (event.target.closest(".resize-handle, .mirror-button") || event.button !== 0) return;
         event.preventDefault();
         this.box.setPointerCapture(event.pointerId);
         const bounds = this.host.getBoundingClientRect();
@@ -458,6 +466,19 @@
         this.box.addEventListener("pointermove", move);
         this.box.addEventListener("pointerup", end);
         this.box.addEventListener("pointercancel", end);
+      });
+    }
+
+    installMirroring(button) {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.layout = sanitizeLayout({
+          ...this.layout,
+          mirrored: !this.layout.mirrored
+        });
+        this.applyLayout();
+        void this.saveLayout();
       });
     }
 
@@ -495,6 +516,11 @@
       this.host.style.setProperty("--cats-x", `${this.layout.x * 100}%`);
       this.host.style.setProperty("--cats-y", `${this.layout.y * 100}%`);
       this.host.style.setProperty("--cats-width", `${this.layout.scale * 100}%`);
+      this.catVideo?.classList.toggle("mirrored", this.layout.mirrored);
+      if (this.mirrorButton) {
+        this.mirrorButton.classList.toggle("active", this.layout.mirrored);
+        this.mirrorButton.setAttribute("aria-pressed", String(this.layout.mirrored));
+      }
     }
 
     async saveLayout() {
@@ -614,7 +640,11 @@
     }
     .cat-box:hover, .cat-box:active { border-color: #fff9; }
     .cat-box:active { cursor: grabbing; }
-    .cat-video { display: block; width: 100%; height: auto; pointer-events: none; }
+    .cat-video {
+      display: block; width: 100%; height: auto; pointer-events: none;
+      transform: scaleX(1); transform-origin: center;
+    }
+    .cat-video.mirrored { transform: scaleX(-1); }
     .spinner {
       width: 46px; height: 46px; margin: 16px auto; border: 5px solid #ffffff44;
       border-top-color: #fff; border-radius: 50%; animation: spin 800ms linear infinite;
@@ -632,6 +662,19 @@
       box-shadow: 0 1px 4px #000b; cursor: nwse-resize; opacity: 0;
       pointer-events: auto; touch-action: none;
     }
+    .mirror-button {
+      position: absolute; left: -8px; top: -8px; z-index: 2;
+      width: 30px; height: 30px; padding: 0;
+      border: 1px solid #fff; border-radius: 50%; background: #111b;
+      color: #fff; font: 700 12px/28px monospace; letter-spacing: -1px;
+      box-shadow: 0 1px 4px #000b; cursor: pointer; opacity: 0;
+      pointer-events: auto; touch-action: manipulation;
+    }
+    .cat-box:hover .mirror-button, .mirror-button:focus-visible, .mirror-button:active {
+      opacity: 1;
+    }
+    .mirror-button:hover, .mirror-button:focus-visible { background: #222e; }
+    .mirror-button.active { color: #111; background: #f59e0b; }
     .cat-box:hover .resize-handle, .resize-handle:active { opacity: 1; }
     @keyframes spin { to { transform: rotate(360deg); } }
   `;
