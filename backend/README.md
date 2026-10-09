@@ -1,6 +1,6 @@
 # Dancing Cats local backend
 
-Локальный HTTP-сервис получает публичный YouTube URL, временно извлекает аудио, определяет ритм через `Beat This! small0`, строит приближённую структуру композиции и сохраняет только `choreography-map.json`. Исходное аудио удаляется после каждого задания.
+Локальный HTTP-сервис получает публичный YouTube URL, временно извлекает аудио, определяет ритм через `Beat This! small0`, строит приближённую структуру композиции и сохраняет отдельные choreography maps для запрошенных ассетов. Исходное аудио удаляется после каждого задания.
 
 Сервис слушает только `127.0.0.1:8765`. Максимальная длительность по умолчанию — 15 минут.
 
@@ -67,6 +67,11 @@ docker buildx build \
 
 Актуальный CUDA channel следует выбирать по официальному конфигуратору PyTorch. GPU-образ закономерно будет существенно больше CPU-варианта.
 
+Основные Python-зависимости анализа зафиксированы на совместимых версиях, чтобы `pip`
+не перебирал десятки вариантов FastAPI/Pydantic при каждой сборке. Для нестабильного
+соединения установлены десять повторов и timeout 120 секунд. `yt-dlp` намеренно не
+зафиксирован: его приходится регулярно обновлять вслед за изменениями YouTube.
+
 ### Permission denied для Docker socket
 
 Если команда сообщает `permission denied ... /var/run/docker.sock`, сначала выполните `docker info` в обычном терминале хостовой ОС. В managed/dev-контейнере Docker socket должен быть явно проброшен с корректным GID; сокет `nobody:nobody` и read-only `/run` нельзя исправить изнутри такого контейнера — запускайте `buildx` на хосте или пересоздайте контейнер с доступом к Docker daemon.
@@ -85,7 +90,7 @@ docker info
 
 Backend начинает warm-up rhythm-модели сразу после старта и переиспользует её для следующих заданий. Warm-up выполняется отдельно, поэтому скачивание YouTube audio может идти параллельно загрузке модели. Demucs и All-In-One больше не используются.
 
-Логи содержат отдельные времена download/FFmpeg, rhythm inference, структурного анализа и planner. Одновременно выполняется только один ML-job, чтобы анализы не конкурировали за CPU и RAM.
+Логи содержат отдельные времена download/FFmpeg, rhythm inference, структурного анализа и planners. Одновременно выполняется только один ML-job, чтобы анализы не конкурировали за CPU и RAM. Результат музыкального анализа кешируется отдельно; planners всех ассетов используют его параллельно без повторной загрузки и inference.
 
 ## Локальная установка
 
@@ -110,10 +115,10 @@ curl http://127.0.0.1:8765/health
 ```bash
 curl -X POST http://127.0.0.1:8765/v1/analysis \
   -H 'Content-Type: application/json' \
-  -d '{"youtubeUrl":"https://www.youtube.com/watch?v=VIDEO_ID","assetId":"three-cats"}'
+  -d '{"youtubeUrl":"https://www.youtube.com/watch?v=VIDEO_ID","assetIds":["three-cats","white-cat"]}'
 ```
 
-Ответ содержит `jobId`, общий `status` и подробный `stage`: `queued`, `downloading`, `analyzing`, `planning`, `cached`, `complete` или `error`. Состояние проверяется через `GET /v1/analysis/{jobId}`. После завершения поле `mapUrl` указывает на готовую карту. Переходы `status/stage` также записываются в Docker-лог.
+Ответ содержит `jobId`, общий `status` и подробный `stage`: `queued`, `downloading`, `analyzing`, `planning`, `cached`, `complete` или `error`. Состояние проверяется через `GET /v1/analysis/{jobId}`. После завершения `mapUrls` сопоставляет каждый `assetId` с готовой картой; для одиночного legacy-запроса также возвращается `mapUrl`. Переходы `status/stage` записываются в Docker-лог.
 
 Swagger UI доступен на `http://127.0.0.1:8765/docs`.
 

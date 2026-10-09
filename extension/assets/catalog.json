@@ -7,6 +7,12 @@
       "name": "Dancing Cats Group",
       "motionMap": "cats/three-cats/motion-map.json",
       "videoIncluded": false
+    },
+    {
+      "id": "white-cat",
+      "name": "White Paw Dancer",
+      "motionMap": "cats/white-cat/motion-map.json",
+      "videoIncluded": false
     }
   ]
 }

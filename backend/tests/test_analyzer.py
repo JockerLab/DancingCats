@@ -58,6 +58,9 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(payload["segments"][0]["patternId"], "A")
         self.assertIn("onsetDensity", payload["bars"][0])
 
+        restored = SongAnalysis.from_dict(payload)
+        self.assertEqual(restored, analysis)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -94,6 +94,8 @@ def validate_catalog() -> None:
         fail("defaultAssetId does not exist")
 
     for descriptor in assets:
+        if not isinstance(descriptor.get("name"), str) or not descriptor["name"].strip():
+            fail(f"asset {descriptor.get('id')} needs a display name")
         map_relative = descriptor.get("motionMap")
         if not map_relative or Path(map_relative).is_absolute() or ".." in Path(map_relative).parts:
             fail(f"unsafe motionMap path for asset {descriptor.get('id')}")

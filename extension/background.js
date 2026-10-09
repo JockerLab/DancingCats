@@ -88,7 +88,9 @@ async function handleStartAnalysis(tabId, message) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       youtubeUrl: message.youtubeUrl,
-      assetId: message.assetId || "three-cats"
+      assetIds: Array.isArray(message.assetIds) && message.assetIds.length
+        ? message.assetIds
+        : [message.assetId || "three-cats"]
     })
   });
   logJobStatus(result);
@@ -102,12 +104,23 @@ async function handleGetAnalysis(tabId, jobId) {
   const result = await requestJson(`${API_ORIGIN}/v1/analysis/${encodeURIComponent(jobId)}`);
   logJobStatus(result);
   if (!result.ok || result.data.status !== "complete") return result;
-  if (!isLocalMapUrl(result.data.mapUrl)) {
+  const mapUrls = result.data.mapUrls
+    || (result.data.mapUrl ? { [result.data.assetId || "three-cats"]: result.data.mapUrl } : null);
+  if (!mapUrls || Object.values(mapUrls).some((url) => !isLocalMapUrl(url))) {
     return { ok: false, error: "Backend returned an invalid choreography URL" };
   }
-  const map = await requestJson(result.data.mapUrl);
-  if (!map.ok) return map;
-  return { ok: true, data: { ...result.data, choreography: map.data } };
+  const entries = await Promise.all(Object.entries(mapUrls).map(async ([assetId, url]) => {
+    const map = await requestJson(url);
+    if (!map.ok) throw new Error(map.error || `Unable to load choreography for ${assetId}`);
+    return [assetId, map.data];
+  })).catch((error) => ({ error }));
+  if (!Array.isArray(entries)) {
+    return { ok: false, error: entries.error instanceof Error ? entries.error.message : String(entries.error) };
+  }
+  return {
+    ok: true,
+    data: { ...result.data, choreographies: Object.fromEntries(entries) }
+  };
 }
 
 function logJobStatus(result) {

@@ -92,6 +92,45 @@ class SongAnalysis:
             "duration": self.duration,
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "SongAnalysis":
+        """Restore a cached track analysis without running the ML model again."""
+        return cls(
+            bpm=float(payload["bpm"]),
+            beats=[float(value) for value in payload["beats"]],
+            downbeats=[float(value) for value in payload["downbeats"]],
+            beat_positions=[int(value) for value in payload["beatPositions"]],
+            segments=[
+                SongSegment(
+                    start=float(segment["start"]),
+                    end=float(segment["end"]),
+                    label=str(segment["label"]),
+                    energy=float(segment["energy"]),
+                    dynamics=float(segment.get("dynamics", 0.5)),
+                    onset_density=float(segment.get("onsetDensity", 0.5)),
+                    spectral_change=float(segment.get("spectralChange", 0.5)),
+                    trend=str(segment.get("trend", "stable")),
+                    pattern_id=str(segment.get("patternId", "A")),
+                    repetition_index=int(segment.get("repetitionIndex", 1)),
+                    label_confidence=float(segment.get("labelConfidence", 0.5)),
+                )
+                for segment in payload["segments"]
+            ],
+            duration=float(payload["duration"]),
+            bars=[
+                SongBar(
+                    start=float(bar["start"]),
+                    end=float(bar["end"]),
+                    energy=float(bar["energy"]),
+                    dynamics=float(bar["dynamics"]),
+                    onset_density=float(bar["onsetDensity"]),
+                    spectral_change=float(bar["spectralChange"]),
+                    trend=str(bar["trend"]),
+                )
+                for bar in payload.get("bars", [])
+            ],
+        )
+
 
 def analyzer_model_name() -> str:
     model = os.getenv("DANCING_CATS_RHYTHM_MODEL", DEFAULT_RHYTHM_MODEL)

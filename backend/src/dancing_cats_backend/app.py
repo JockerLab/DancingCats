@@ -24,7 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Dancing Cats local analyzer",
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
     app.state.settings = active_settings
@@ -43,7 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/analysis", response_model=JobResponse, response_model_by_alias=True)
     def create_analysis(payload: AnalysisRequest, request: Request) -> JobResponse:
         try:
-            job = manager.submit(str(payload.youtube_url), payload.asset_id, payload.force)
+            job = manager.submit(str(payload.youtube_url), payload.asset_ids or [], payload.force)
         except (ValueError, OSError, json.JSONDecodeError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return _job_response(job, request)
@@ -69,13 +69,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 def _job_response(job: Job, request: Request) -> JobResponse:
     map_url = None
+    map_urls = None
     if job.status == "complete":
-        map_url = str(request.base_url).rstrip("/") + f"/v1/maps/{job.cache_key}"
+        base_url = str(request.base_url).rstrip("/")
+        map_urls = {
+            asset_id: base_url + f"/v1/maps/{cache_key}"
+            for asset_id, cache_key in job.map_keys.items()
+        }
+        if len(map_urls) == 1:
+            map_url = next(iter(map_urls.values()))
     return JobResponse(
         jobId=job.job_id,
         status=job.status,
         stage=job.stage,
         videoId=job.video_id,
         mapUrl=map_url,
+        mapUrls=map_urls,
         error=job.error,
     )

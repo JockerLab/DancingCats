@@ -6,6 +6,8 @@ ARG PYTORCH_WHEEL_CHANNEL=cpu
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10 \
     DANCING_CATS_HOST=0.0.0.0 \
     DANCING_CATS_DATA_DIR=/app/data \
     DANCING_CATS_ASSETS_DIR=/assets \
@@ -30,17 +32,19 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Keep the expensive third-party layer independent from application source.
 # This makes regular code-only rebuilds reuse PyTorch and the analyzer stack.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install \
-      "fastapi>=0.115,<1" \
-      "pydantic>=2.9,<3" \
-      "uvicorn[standard]>=0.30,<1" \
+    pip install --prefer-binary \
+      "fastapi==0.115.14" \
+      "pydantic==2.11.7" \
+      "uvicorn[standard]==0.34.3" \
       "yt-dlp[default]" \
-      "beat-this>=1.1,<2" \
-      "librosa>=0.10.2,<0.12"
+      "beat-this==1.1.0" \
+      "librosa==0.11.0"
 
 COPY README.md ./
 COPY src ./src
-RUN pip install --no-deps .
+RUN pip install --no-deps . \
+    && pip check \
+    && python -c "import torch, torchaudio; from beat_this.inference import Audio2Beats"
 
 EXPOSE 8765
 VOLUME ["/app/data", "/assets", "/models"]
