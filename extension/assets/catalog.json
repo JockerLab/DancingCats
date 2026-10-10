@@ -9,9 +9,27 @@
       "videoIncluded": false
     },
     {
-      "id": "white-cat",
-      "name": "White Paw Dancer",
-      "motionMap": "cats/white-cat/motion-map.json",
+      "id": "solo-dancing-cat",
+      "name": "Solo Dancing Cat",
+      "motionMap": "cats/solo-dancing-cat/motion-map.json",
+      "videoIncluded": false
+    },
+    {
+      "id": "kitten-trio",
+      "name": "Dancing Kitten Trio",
+      "motionMap": "cats/kitten-trio/motion-map.json",
+      "videoIncluded": false
+    },
+    {
+      "id": "dancing-cat-duo",
+      "name": "Dancing Cat Duo",
+      "motionMap": "cats/dancing-cat-duo/motion-map.json",
+      "videoIncluded": false
+    },
+    {
+      "id": "mushroom-kitten-duo",
+      "name": "Mushroom Kitten Duo",
+      "motionMap": "cats/mushroom-kitten-duo/motion-map.json",
       "videoIncluded": false
     }
   ]

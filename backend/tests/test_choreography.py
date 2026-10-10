@@ -1,7 +1,7 @@
 import unittest
 
 from dancing_cats_backend.analyzer import SongAnalysis, SongSegment
-from dancing_cats_backend.choreography import build_choreography
+from dancing_cats_backend.choreography import _build_pulse_events, build_choreography
 
 
 class ChoreographyTests(unittest.TestCase):
@@ -45,6 +45,8 @@ class ChoreographyTests(unittest.TestCase):
         self.assertIn("musicProfile", result["cues"][0])
         self.assertIn("onsetDensity", result["cues"][0]["musicProfile"])
         self.assertIn("motionProfile", result["cues"][0])
+        self.assertEqual(result["schemaVersion"], 3)
+        self.assertTrue(result["effects"]["pulse"]["events"])
         self.assertEqual({cue["segmentId"] for cue in result["cues"]}, {"a", "b"})
 
     def test_energy_selection_does_not_reproduce_the_native_loop(self):
@@ -102,18 +104,23 @@ class ChoreographyTests(unittest.TestCase):
         )
         motion_map = {
             "id": "test-cats",
+            "duration": 4,
+            "mediaDuration": 8,
+            "reverseOffset": 4,
             "segments": [
                 {
                     "id": "calm", "beats": 4, "energy": 0.2,
                     "sourceStart": 0, "sourceEnd": 2,
                     "entryPose": "a", "exitPose": "a", "next": ["dynamic"],
                     "hardCutSafe": True, "loopable": False, "maxConsecutive": 1,
+                    "pingPongSafe": False,
                 },
                 {
                     "id": "dynamic", "beats": 4, "energy": 0.95,
                     "sourceStart": 2, "sourceEnd": 4,
                     "entryPose": "b", "exitPose": "b", "next": ["dynamic", "calm"],
                     "hardCutSafe": True, "loopable": True, "maxConsecutive": 2,
+                    "pingPongSafe": True,
                     "sectionAffinity": ["chorus"], "tempoRange": [120, 180],
                 },
             ],
@@ -131,6 +138,36 @@ class ChoreographyTests(unittest.TestCase):
             ("dynamic", "dynamic", "dynamic"),
             zip(segment_ids, segment_ids[1:], segment_ids[2:]),
         )
+        repeated_dynamic = [
+            cue for cue in result["cues"]
+            if cue["segmentId"] == "dynamic" and cue["repeatIndex"] == 2
+        ]
+        self.assertTrue(repeated_dynamic)
+        self.assertTrue(all(cue["playbackMode"] == "ping-pong-reverse" for cue in repeated_dynamic))
+        self.assertTrue(all(cue["sourceStart"] == 4 and cue["sourceEnd"] == 6 for cue in repeated_dynamic))
+
+    def test_pulse_uses_every_beat_with_strong_and_section_accents(self):
+        beats = [index * 0.5 for index in range(17)]
+        analysis = SongAnalysis(
+            bpm=120,
+            beats=beats,
+            downbeats=beats[::4],
+            beat_positions=[index % 4 + 1 for index in range(len(beats))],
+            segments=[
+                SongSegment(0, 4, "verse", 0.7, dynamics=0.7, onset_density=0.7),
+                SongSegment(4, 8.5, "chorus", 0.7, dynamics=0.7, onset_density=0.7),
+            ],
+            duration=8.5,
+        )
+
+        events = _build_pulse_events(analysis, 0, 8.5)
+
+        self.assertEqual([event["time"] for event in events], beats)
+        verse_events = [event for event in events if event["section"] == "verse"]
+        chorus_events = [event for event in events if event["section"] == "chorus"]
+        self.assertGreater(verse_events[0]["amplitude"], verse_events[1]["amplitude"])
+        self.assertGreater(verse_events[2]["amplitude"], verse_events[1]["amplitude"])
+        self.assertGreater(chorus_events[0]["amplitude"], verse_events[0]["amplitude"])
 
 
 if __name__ == "__main__":

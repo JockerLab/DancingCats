@@ -14,7 +14,10 @@
     constructor() {
       this.enabled = false;
       this.mainVideo = null;
+      this.player = null;
       this.playerAbort = null;
+      this.playerUiObserver = null;
+      this.overlayUiFrame = null;
       this.host = null;
       this.shadow = null;
       this.layersRoot = null;
@@ -57,6 +60,7 @@
         this.enabled = true;
         this.observer.observe(document.documentElement, { childList: true, subtree: true });
         window.addEventListener("yt-navigate-finish", this.onYouTubeNavigate);
+        document.addEventListener("fullscreenchange", this.scheduleOverlayUiUpdate);
         this.attach();
         this.animationFrame = requestAnimationFrame(this.animate);
         try {
@@ -81,7 +85,10 @@
       this.assetStates.clear();
       this.observer.disconnect();
       window.removeEventListener("yt-navigate-finish", this.onYouTubeNavigate);
+      document.removeEventListener("fullscreenchange", this.scheduleOverlayUiUpdate);
       this.detachPlayer();
+      if (this.overlayUiFrame != null) cancelAnimationFrame(this.overlayUiFrame);
+      this.overlayUiFrame = null;
       if (this.animationFrame != null) cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
       for (const layer of this.layers) layer.video.pause();
@@ -328,7 +335,9 @@
         video.currentTime = clamp(
           sample.sourceTime,
           0,
-          Math.max(0, Number(state.resources.motionMap.duration) - 1 / 30)
+          Math.max(0, Number(
+            state.resources.motionMap.mediaDuration || state.resources.motionMap.duration
+          ) - 1 / 30)
         );
         await waitForSeek(video);
         if (loadToken !== layer.loadToken || !this.layers.includes(layer)) return;
@@ -371,29 +380,93 @@
       if (!video || !player) return;
       if (!this.host) this.createOverlay();
       if (this.host.parentElement !== player) player.append(this.host);
-      if (this.mainVideo !== video) this.attachPlayer(video);
+      if (this.mainVideo !== video || this.player !== player) this.attachPlayer(video, player);
+      this.scheduleOverlayUiUpdate();
     }
 
-    attachPlayer(video) {
+    attachPlayer(video, player) {
       this.detachPlayer();
       this.mainVideo = video;
+      this.player = player;
       this.playerAbort = new AbortController();
       const { signal } = this.playerAbort;
       video.addEventListener("play", () => {
         for (const layer of this.layers) this.playLayer(layer);
       }, { signal });
       video.addEventListener("pause", () => {
-        for (const layer of this.layers) layer.video.pause();
+        for (const layer of this.layers) {
+          layer.video.pause();
+          layer.video.style.setProperty("--pulse-scale", "1");
+        }
       }, { signal });
       video.addEventListener("seeking", () => this.renderAllLayers(), { signal });
       video.addEventListener("seeked", () => this.renderAllLayers(), { signal });
       video.addEventListener("emptied", () => this.scheduleAttach(), { signal });
+      player.addEventListener("pointermove", this.scheduleOverlayUiUpdate, { signal, passive: true });
+      player.addEventListener("pointerleave", this.scheduleOverlayUiUpdate, { signal, passive: true });
+      this.playerUiObserver = new MutationObserver(this.scheduleOverlayUiUpdate);
+      this.playerUiObserver.observe(player, {
+        attributes: true,
+        attributeFilter: ["class", "style", "hidden", "aria-hidden"],
+        childList: true,
+        subtree: true
+      });
+      this.scheduleOverlayUiUpdate();
     }
 
     detachPlayer() {
       this.playerAbort?.abort();
       this.playerAbort = null;
+      this.playerUiObserver?.disconnect();
+      this.playerUiObserver = null;
       this.mainVideo = null;
+      this.player = null;
+    }
+
+    scheduleOverlayUiUpdate = () => {
+      if (!this.enabled || this.overlayUiFrame != null) return;
+      this.overlayUiFrame = requestAnimationFrame(() => {
+        this.overlayUiFrame = null;
+        this.updateOverlayUi();
+      });
+    };
+
+    updateOverlayUi() {
+      if (!this.host || !this.player || !this.addButton) return;
+      const picker = this.shadow?.querySelector(".asset-picker");
+      if (!picker) return;
+
+      const controlsHidden = this.player.classList.contains("ytp-autohide")
+        || this.player.classList.contains("ytp-hide-controls");
+      const pickerActive = picker.matches(":hover") || picker.matches(":focus-within");
+      const shouldHide = controlsHidden && !pickerActive;
+      this.host.classList.toggle("youtube-controls-hidden", shouldHide);
+      if (shouldHide) this.closeAssetMenu();
+
+      let top = 12;
+      const fullscreenElement = document.fullscreenElement;
+      const isFullscreen = this.player.classList.contains("ytp-fullscreen")
+        || Boolean(fullscreenElement && (
+          fullscreenElement === this.player
+          || fullscreenElement.contains(this.player)
+          || this.player.contains(fullscreenElement)
+        ));
+      if (isFullscreen) {
+        const playerBounds = this.player.getBoundingClientRect();
+        const upperRightControls = this.player.querySelectorAll(
+          "button, [role='button'], [class*='playlist'], [aria-label*='playlist' i], [aria-label*='плейлист' i]"
+        );
+        for (const control of upperRightControls) {
+          const bounds = control.getBoundingClientRect();
+          const style = getComputedStyle(control);
+          if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) < 0.05) continue;
+          if (bounds.width < 8 || bounds.height < 8 || bounds.width > 160 || bounds.height > 120) continue;
+          if (bounds.right < playerBounds.right - 120 || bounds.top > playerBounds.top + 120) continue;
+          top = Math.max(top, bounds.bottom - playerBounds.top + 8);
+        }
+        top = Math.min(top, Math.max(12, playerBounds.height - 58));
+      }
+      picker.style.top = `${Math.round(top)}px`;
     }
 
     createOverlay() {
@@ -420,6 +493,7 @@
         const open = this.assetMenu.hidden;
         this.assetMenu.hidden = !open;
         this.addButton.setAttribute("aria-expanded", String(open));
+        this.scheduleOverlayUiUpdate();
       });
       this.shadow.addEventListener("pointerdown", (event) => {
         if (!event.target.closest(".asset-picker")) this.closeAssetMenu();
@@ -443,7 +517,7 @@
         item.setAttribute("role", "menuitem");
         item.innerHTML = `
           <span class="asset-preview-wrap">
-            <video class="asset-preview" muted playsinline preload="metadata"></video>
+            <video class="asset-preview" muted playsinline preload="auto"></video>
             <span class="asset-preview-error" hidden>!</span>
           </span>
           <span class="asset-name"></span>`;
@@ -466,7 +540,11 @@
         preview.src = new URL(motionMap.video, mapUrl).href;
         preview.load();
         await waitForMedia(preview, "loadeddata");
-        preview.currentTime = 0;
+        const duration = Number(motionMap.duration) || preview.duration || 1;
+        const previewTime = clamp(Number(motionMap.previewTime) || 0.1, 0.001, Math.max(0.001, duration - 1 / 30));
+        preview.currentTime = previewTime;
+        await waitForSeek(preview);
+        preview.pause();
       } catch {
         if (!item.isConnected) return;
         preview.hidden = true;
@@ -657,6 +735,7 @@
     applyLayerVisual(layer) {
       const { kind, stage, message } = layer.visualState;
       if (kind !== "ready") layer.video.pause();
+      if (kind !== "ready") layer.video.style.setProperty("--pulse-scale", "1");
       layer.video.hidden = kind !== "ready";
       const label = loadingStageLabel(stage);
       layer.spinner.hidden = kind !== "loading";
@@ -719,7 +798,13 @@
       const state = this.assetStates.get(layer.assetId);
       if (!state?.choreography || !state.resources) return;
       const sample = this.sampleChoreography(layer, state, this.mainVideo.currentTime);
-      const limit = Math.max(0, Number(state.resources.motionMap.duration) - 1 / 30);
+      const pulseScale = sample.active
+        ? pulseScaleAt(state.choreography, this.mainVideo.currentTime)
+        : 1;
+      layer.video.style.setProperty("--pulse-scale", pulseScale.toFixed(4));
+      const limit = Math.max(0, Number(
+        state.resources.motionMap.mediaDuration || state.resources.motionMap.duration
+      ) - 1 / 30);
       const desiredTime = clamp(sample.sourceTime, 0, limit);
       const error = desiredTime - layer.video.currentTime;
       if (layer.video.seeking) return;
@@ -747,22 +832,30 @@
       const cues = state.choreography.cues;
       if (mediaTime < cues[0].start) {
         layer.lastCueIndex = -1;
-        return { active: false, cueChanged: false, sourceTime: cues[0].sourceStart, playbackRate: 1 };
+        return {
+          active: false, cueChanged: false, sourceTime: cues[0].sourceStart,
+          playbackRate: 1
+        };
       }
       const cueIndex = findCueIndex(cues, mediaTime);
       if (cueIndex < 0) {
         const lastCue = cues.at(-1);
         layer.lastCueIndex = cues.length;
-        return { active: false, cueChanged: false, sourceTime: lastCue.sourceEnd - 1 / 30, playbackRate: 1 };
+        return {
+          active: false, cueChanged: false, sourceTime: lastCue.sourceEnd - 1 / 30,
+          playbackRate: 1
+        };
       }
       const cue = cues[cueIndex];
       const progress = clamp((mediaTime - cue.start) / Math.max(1e-6, cue.end - cue.start), 0, 1);
       const cueChanged = cueIndex !== layer.lastCueIndex;
+      const sourceStart = Number(cue.sourceStart);
+      const sourceEnd = Number(cue.sourceEnd);
       layer.lastCueIndex = cueIndex;
       return {
         active: true,
         cueChanged,
-        sourceTime: cue.sourceStart + (cue.sourceEnd - cue.sourceStart) * progress,
+        sourceTime: sourceStart + (sourceEnd - sourceStart) * progress,
         playbackRate: Number(cue.playbackRate) || 1
       };
     }
@@ -803,6 +896,31 @@
       else return middle;
     }
     return -1;
+  }
+
+  function pulseScaleAt(choreography, mediaTime) {
+    const events = choreography?.effects?.pulse?.events;
+    if (!Array.isArray(events) || !events.length) return 1;
+    let low = 0;
+    let high = events.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (Number(events[middle].time) <= mediaTime) low = middle + 1;
+      else high = middle;
+    }
+    let envelope = 0;
+    for (const index of [low - 1, low]) {
+      if (index < 0 || index >= events.length) continue;
+      const event = events[index];
+      const delta = mediaTime - Number(event.time);
+      const attack = Math.max(0.001, Number(event.attack) || 0.05);
+      const release = Math.max(0.001, Number(event.release) || 0.24);
+      let phase = 0;
+      if (delta >= -attack && delta < 0) phase = 1 + delta / attack;
+      else if (delta >= 0 && delta <= release) phase = (1 - delta / release) ** 2;
+      envelope = Math.max(envelope, phase * clamp(Number(event.amplitude) || 0, 0, 0.12));
+    }
+    return 1 + envelope;
   }
 
   async function fetchJsonWithRetry(url) {
@@ -888,8 +1006,11 @@
     }
     .cat-box:hover, .cat-box:active { border-color: #fff9; }
     .cat-box:active { cursor: grabbing; }
-    .cat-video { display: block; width: 100%; height: auto; pointer-events: none; transform: scaleX(1); transform-origin: center; }
-    .cat-video.mirrored { transform: scaleX(-1); }
+    .cat-video {
+      --pulse-scale: 1; display: block; width: 100%; height: auto; pointer-events: none;
+      transform: scale(var(--pulse-scale)) scaleX(1); transform-origin: 50% 100%;
+    }
+    .cat-video.mirrored { transform: scale(var(--pulse-scale)) scaleX(-1); }
     .spinner {
       width: 46px; height: 46px; margin: 16px auto; border: 5px solid #ffffff44;
       border-top-color: #fff; border-radius: 50%; animation: spin 800ms linear infinite;
@@ -922,6 +1043,10 @@
     }
     .cat-box:hover .resize-handle, .resize-handle:active { opacity: 1; }
     .asset-picker { position: absolute; top: 12px; right: 12px; z-index: 10; pointer-events: auto; }
+    :host(.youtube-controls-hidden) .asset-picker {
+      opacity: 0; visibility: hidden; pointer-events: none;
+    }
+    .asset-picker { transition: opacity 120ms linear, visibility 120ms linear; }
     .add-layer-button {
       display: block; margin-left: auto; width: 38px; height: 38px; padding: 0;
       border: 1px solid #fff; border-radius: 50%; background: #111c; color: #fff;

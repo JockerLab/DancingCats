@@ -4,6 +4,9 @@
   "entityMode": "single-group",
   "video": "video.webm",
   "duration": 11.8,
+  "mediaDuration": 23.6,
+  "reverseOffset": 11.8,
+  "previewTime": 0.1,
   "nativeBpm": 122.0339,
   "phraseBeats": 24,
   "excludedRanges": [
@@ -29,6 +32,7 @@
       "exitPose": "front-open",
       "hardCutSafe": true,
       "loopable": false,
+      "pingPongSafe": false,
       "maxConsecutive": 1,
       "next": ["paw-waves"]
     },
@@ -47,6 +51,7 @@
       "exitPose": "side-open",
       "hardCutSafe": true,
       "loopable": false,
+      "pingPongSafe": false,
       "maxConsecutive": 1,
       "next": ["side-drive-b", "lift-hit"]
     },
@@ -65,6 +70,7 @@
       "exitPose": "side-turn",
       "hardCutSafe": true,
       "loopable": true,
+      "pingPongSafe": true,
       "maxConsecutive": 3,
       "next": ["side-drive-b", "lift-rise", "paw-waves"]
     },
@@ -83,6 +89,7 @@
       "exitPose": "front-raised",
       "hardCutSafe": false,
       "loopable": false,
+      "pingPongSafe": false,
       "maxConsecutive": 1,
       "next": ["lift-hit", "arms-spread"]
     },
@@ -101,6 +108,7 @@
       "exitPose": "front-neutral",
       "hardCutSafe": true,
       "loopable": true,
+      "pingPongSafe": true,
       "maxConsecutive": 2,
       "next": ["lift-hit", "arms-spread", "paw-waves"]
     }

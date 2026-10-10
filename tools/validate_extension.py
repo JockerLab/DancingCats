@@ -134,6 +134,14 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
         fail(f"excludedRanges must be an array for {asset_id}")
     exclusions = []
     duration = float(motion_map.get("duration", 0))
+    media_duration = float(motion_map.get("mediaDuration", duration))
+    reverse_offset = motion_map.get("reverseOffset")
+    if reverse_offset is not None:
+        reverse_offset = float(reverse_offset)
+        if abs(reverse_offset - duration) > 0.001:
+            fail(f"reverseOffset must equal forward duration for {asset_id}")
+        if media_duration < reverse_offset + duration - 0.001:
+            fail(f"mediaDuration does not contain the reverse bank for {asset_id}")
     for excluded in raw_exclusions:
         if not isinstance(excluded, dict):
             fail(f"excludedRanges entries must be objects for {asset_id}")
@@ -191,6 +199,10 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
             fail(f"hardCutSafe must be boolean in {asset_id}/{segment.get('id')}")
         if not isinstance(segment.get("loopable"), bool):
             fail(f"loopable must be boolean in {asset_id}/{segment.get('id')}")
+        if not isinstance(segment.get("pingPongSafe"), bool):
+            fail(f"pingPongSafe must be boolean in {asset_id}/{segment.get('id')}")
+        if segment["pingPongSafe"] and not segment["loopable"]:
+            fail(f"pingPongSafe movement must also be loopable in {asset_id}/{segment.get('id')}")
         if int(segment.get("maxConsecutive", 0)) < 1:
             fail(f"maxConsecutive must be positive in {asset_id}/{segment.get('id')}")
         if not segment.get("entryPose") or not segment.get("exitPose"):
@@ -226,7 +238,7 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
     if video_available and video_path.stat().st_size > 8 * 1024 * 1024:
         print(f"WARNING: {asset_id} video exceeds the 8 MiB target")
     if video_available:
-        validate_webm(video_path, duration, asset_id)
+        validate_webm(video_path, media_duration, asset_id)
 
 
 def validate_webm(asset: Path, expected_duration: float, asset_id: str) -> None:

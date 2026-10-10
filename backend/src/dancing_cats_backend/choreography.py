@@ -111,14 +111,20 @@ def build_choreography(
         segment = segments[cue.segment_id]
         start = beats[cue.start_index]
         end = beats[cue.end_index]
+        source_start, source_end, ping_pong_reverse = _playback_range(
+            motion_map,
+            segment,
+            cue.repeat_count,
+        )
         cues.append({
             "start": round(start, 6),
             "end": round(end, 6),
             "segmentId": cue.segment_id,
-            "sourceStart": segment["sourceStart"],
-            "sourceEnd": segment["sourceEnd"],
+            "sourceStart": source_start,
+            "sourceEnd": source_end,
             "playbackRate": round((segment["sourceEnd"] - segment["sourceStart"]) / (end - start), 5),
             "repeatIndex": cue.repeat_count,
+            "playbackMode": "ping-pong-reverse" if ping_pong_reverse else "forward",
             "section": _section_at(analysis, start),
             "musicProfile": _music_profile_at(analysis, start),
             "motionProfile": {
@@ -130,7 +136,7 @@ def build_choreography(
         })
 
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "videoId": video_id,
         "title": title,
         "duration": analysis.duration,
@@ -138,8 +144,93 @@ def build_choreography(
         "assetVersion": asset_version,
         "analyzer": "beat-this+lightweight-structure",
         "song": analysis.to_dict(),
+        "effects": {
+            "pulse": {
+                "anchor": "all-beats",
+                "events": _build_pulse_events(
+                    analysis,
+                    cues[0]["start"] if cues else 0,
+                    cues[-1]["end"] if cues else 0,
+                ),
+            },
+        },
         "cues": cues,
     }
+
+
+def _playback_range(
+    motion_map: dict[str, Any],
+    segment: dict[str, Any],
+    repeat_count: int,
+) -> tuple[float, float, bool]:
+    source_start = float(segment["sourceStart"])
+    source_end = float(segment["sourceEnd"])
+    ping_pong_reverse = bool(
+        repeat_count > 1
+        and repeat_count % 2 == 0
+        and segment.get("pingPongSafe", False)
+        and motion_map.get("reverseOffset") is not None
+    )
+    if not ping_pong_reverse:
+        return source_start, source_end, False
+    forward_duration = float(motion_map["duration"])
+    reverse_offset = float(motion_map["reverseOffset"])
+    return (
+        round(reverse_offset + forward_duration - source_end, 6),
+        round(reverse_offset + forward_duration - source_start, 6),
+        True,
+    )
+
+
+def _build_pulse_events(
+    analysis: SongAnalysis,
+    start: float,
+    end: float,
+) -> list[dict[str, Any]]:
+    events = []
+    section_multipliers = {
+        "intro": 0.58,
+        "verse": 0.76,
+        "bridge": 0.88,
+        "chorus": 1.16,
+        "drop": 1.24,
+        "solo": 1.08,
+        "inst": 1.0,
+        "outro": 0.68,
+        "end": 0.55,
+    }
+    beat_multipliers = {
+        1: 1.0,
+        2: 0.38,
+        3: 0.58,
+        4: 0.38,
+    }
+    for index, (beat, position) in enumerate(zip(analysis.beats, analysis.beat_positions)):
+        if beat < start - 1e-6 or beat >= end - 1e-6:
+            continue
+        profile = _music_profile_at(analysis, beat)
+        section = _section_at(analysis, beat)
+        loudness = float(profile["energy"])
+        dynamics = float(profile["dynamics"])
+        onset_density = float(profile["onsetDensity"])
+        energy_score = min(1, max(0, loudness * 0.5 + dynamics * 0.3 + onset_density * 0.2))
+        section_multiplier = section_multipliers.get(section, 0.9)
+        strong_amplitude = min(0.1, max(0.01, 0.008 + energy_score * 0.074 * section_multiplier))
+        beat_multiplier = beat_multipliers.get(position, 0.38)
+        amplitude = max(0.004, strong_amplitude * beat_multiplier)
+        next_beat = analysis.beats[index + 1] if index + 1 < len(analysis.beats) else beat + 0.5
+        beat_interval = max(0.2, next_beat - beat)
+        events.append({
+            "time": round(beat, 6),
+            "amplitude": round(amplitude, 4),
+            "attack": round(min(0.07, beat_interval * 0.12), 4),
+            "release": round(min(0.34, max(0.14, beat_interval * 0.55)), 4),
+            "beatPosition": position,
+            "section": section,
+            "energy": round(energy_score, 4),
+            "loudness": round(loudness, 4),
+        })
+    return events
 
 
 def _candidate(

@@ -115,10 +115,12 @@ curl http://127.0.0.1:8765/health
 ```bash
 curl -X POST http://127.0.0.1:8765/v1/analysis \
   -H 'Content-Type: application/json' \
-  -d '{"youtubeUrl":"https://www.youtube.com/watch?v=VIDEO_ID","assetIds":["three-cats","white-cat"]}'
+  -d '{"youtubeUrl":"https://www.youtube.com/watch?v=VIDEO_ID","assetIds":["three-cats","solo-dancing-cat","kitten-trio","dancing-cat-duo","mushroom-kitten-duo"]}'
 ```
 
 Ответ содержит `jobId`, общий `status` и подробный `stage`: `queued`, `downloading`, `analyzing`, `planning`, `cached`, `complete` или `error`. Состояние проверяется через `GET /v1/analysis/{jobId}`. После завершения `mapUrls` сопоставляет каждый `assetId` с готовой картой; для одиночного legacy-запроса также возвращается `mapUrl`. Переходы `status/stage` записываются в Docker-лог.
+
+Choreography map schema v3 содержит `effects.pulse.events` для каждой доли с её позицией в такте, амплитудой, attack/release, относительной громкостью и структурной секцией. Первая доля сильнее, третья получает промежуточный акцент, остальные остаются слабее. Cue с `playbackMode: ping-pong-reverse` указывает на прямой диапазон встроенного reverse-банка WebM; backend выдаёт его только для повторного движения, вручную отмеченного как безопасное для reverse.
 
 Swagger UI доступен на `http://127.0.0.1:8765/docs`.
 

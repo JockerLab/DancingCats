@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if (( $# < 2 )); then
-  echo "Usage: $0 INPUT OUTPUT [START] [DURATION] [KEY_COLOR] [SIMILARITY] [BLEND]" >&2
+  echo "Usage: $0 INPUT OUTPUT [START] [DURATION] [KEY_COLOR] [SIMILARITY] [BLEND] [CROP] [WIDTH]" >&2
   exit 2
 fi
 
@@ -13,6 +13,8 @@ duration=${4:-}
 key_color=${5:-0x00FF00}
 similarity=${6:-0.18}
 blend=${7:-0.08}
+crop=${8:-}
+width=${9:-}
 
 if [[ ! -f "$input_file" ]]; then
   echo "Input file does not exist: $input_file" >&2
@@ -26,13 +28,23 @@ if [[ -n "$duration" ]]; then
   duration_args=(-t "$duration")
 fi
 
+video_filter=""
+if [[ -n "$crop" ]]; then
+  video_filter="crop=${crop},"
+fi
+video_filter+="chromakey=color=${key_color}:similarity=${similarity}:blend=${blend},despill=type=green:mix=0.7,"
+if [[ -n "$width" ]]; then
+  video_filter+="scale=${width}:-2,"
+fi
+video_filter+="format=yuva420p"
+
 ffmpeg -hide_banner -y \
   -ss "$start_time" \
   -i "$input_file" \
   -map_metadata -1 \
   "${duration_args[@]}" \
   -an \
-  -vf "chromakey=color=${key_color}:similarity=${similarity}:blend=${blend},despill=type=green:mix=0.7,format=yuva420p" \
+  -vf "$video_filter" \
   -r 30 \
   -c:v libvpx-vp9 \
   -pix_fmt yuva420p \
@@ -44,5 +56,5 @@ ffmpeg -hide_banner -y \
   -keyint_min 15 \
   "$output_file"
 
-echo "Created: $output_file"
+"$(dirname "$0")/add-reverse-bank.sh" "$output_file" "$output_file"
 echo "Inspect transparency and tune key color/similarity/blend before shipping."

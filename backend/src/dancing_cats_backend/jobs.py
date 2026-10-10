@@ -20,7 +20,7 @@ from .youtube import download_audio, extract_video_id
 
 LOGGER = logging.getLogger(__name__)
 ANALYSIS_CACHE_VERSION = "track-analysis-v1"
-PLANNER_VERSION = "planner-v5"
+PLANNER_VERSION = "planner-v8-pulse-all-beats"
 
 
 @dataclass

@@ -16,12 +16,13 @@ fi
 
 mkdir -p "$(dirname "$output_file")"
 
-# Preserve the complete 11.8-second reference in its original direction. Only
-# the empty vertical margins and green background are removed.
+# Preserve the complete 11.8-second reference in its original direction. The
+# crop is the union of alpha bounds across all frames plus a small vertical
+# margin; the cats reach both horizontal edges during the widest movements.
 ffmpeg -hide_banner -y \
   -i "$input_file" \
   -map_metadata -1 \
-  -filter_complex "[0:v]fps=30,crop=608:690:0:240,chromakey=color=0x00FF00:similarity=0.14:blend=0.055,despill=type=green:mix=0.75,setpts=PTS-STARTPTS,format=yuva420p[out]" \
+  -filter_complex "[0:v]fps=30,crop=608:660:0:254,chromakey=color=0x00FF00:similarity=0.14:blend=0.055,despill=type=green:mix=0.75,setpts=PTS-STARTPTS,format=yuva420p[out]" \
   -map "[out]" \
   -an \
   -c:v libvpx-vp9 \
@@ -32,7 +33,7 @@ ffmpeg -hide_banner -y \
   -auto-alt-ref 0 \
   -g 15 \
   -keyint_min 15 \
-  -force_key_frames "0,1.92,3.9333,5.88,7.8667,9.83" \
+  -force_key_frames "0,2.9667,3.1667,5.88,7.8667,9.83" \
   "$output_file"
 
-echo "Created full-length transparent video: $output_file"
+"$(dirname "$0")/add-reverse-bank.sh" "$output_file" "$output_file"

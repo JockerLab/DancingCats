@@ -20,7 +20,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml ./
 
 # Installing CPU wheels first prevents pip from resolving the multi-gigabyte
 # NVIDIA CUDA dependency set. Override the channel only for a GPU image.
@@ -40,6 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       "beat-this==1.1.0" \
       "librosa==0.11.0"
 
+COPY pyproject.toml ./
 COPY README.md ./
 COPY src ./src
 RUN pip install --no-deps . \
