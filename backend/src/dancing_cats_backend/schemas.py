@@ -19,7 +19,7 @@ class AnalysisRequest(BaseModel):
 
     @model_validator(mode="after")
     def normalize_assets(self) -> "AnalysisRequest":
-        requested = self.asset_ids if self.asset_ids is not None else [self.asset_id or "three-cats"]
+        requested = self.asset_ids if self.asset_ids is not None else [self.asset_id or "one-cat-1"]
         requested = list(dict.fromkeys(requested))
         if not requested or len(requested) > 32:
             raise ValueError("assetIds must contain between 1 and 32 assets")

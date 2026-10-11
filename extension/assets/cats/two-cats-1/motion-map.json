@@ -1,7 +1,6 @@
 {
   "schemaVersion": 2,
-  "id": "dancing-cat-duo",
-  "entityMode": "single-group",
+  "id": "two-cats-1",
   "video": "video.webm",
   "duration": 14.866,
   "mediaDuration": 29.732,

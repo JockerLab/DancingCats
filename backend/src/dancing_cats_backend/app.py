@@ -24,7 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Dancing Cats local analyzer",
-        version="0.5.2",
+        version="0.5.4",
         lifespan=lifespan,
     )
     app.state.settings = active_settings

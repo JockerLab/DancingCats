@@ -1,7 +1,6 @@
 {
   "schemaVersion": 2,
-  "id": "solo-dancing-cat",
-  "entityMode": "single-group",
+  "id": "one-cat-1",
   "video": "video.webm",
   "duration": 7.466,
   "mediaDuration": 14.932,

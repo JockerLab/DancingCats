@@ -94,6 +94,8 @@ def validate_catalog() -> None:
         fail("defaultAssetId does not exist")
 
     for descriptor in assets:
+        if "videoIncluded" in descriptor:
+            fail(f"obsolete videoIncluded field in asset {descriptor.get('id')}")
         if not isinstance(descriptor.get("name"), str) or not descriptor["name"].strip():
             fail(f"asset {descriptor.get('id')} needs a display name")
         map_relative = descriptor.get("motionMap")
@@ -108,17 +110,15 @@ def validate_motion_map(descriptor: dict, map_path: Path, motion_map: dict) -> N
     asset_id = descriptor["id"]
     if motion_map.get("schemaVersion") != 2 or motion_map.get("id") != asset_id:
         fail(f"invalid motion map identity for {asset_id}")
-    if motion_map.get("entityMode") != "single-group":
-        fail(f"{asset_id} must be described as one indivisible group")
+    if "entityMode" in motion_map:
+        fail(f"obsolete entityMode field in motion map {asset_id}")
     video_relative = motion_map.get("video")
     if not video_relative or Path(video_relative).is_absolute() or ".." in Path(video_relative).parts:
         fail(f"unsafe video path for {asset_id}")
     video_path = map_path.parent / video_relative
     video_available = video_path.is_file()
-    if not video_available and descriptor.get("videoIncluded", True):
-        fail(f"missing video for {asset_id}: {video_path.relative_to(ROOT)}")
     if not video_available:
-        print(f"WARNING: local video is not installed for {asset_id}")
+        fail(f"missing video for {asset_id}: {video_path.relative_to(ROOT)}")
 
     segments = motion_map.get("segments")
     if not isinstance(segments, list) or not segments:

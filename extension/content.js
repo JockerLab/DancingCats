@@ -918,7 +918,7 @@
       let phase = 0;
       if (delta >= -attack && delta < 0) phase = 1 + delta / attack;
       else if (delta >= 0 && delta <= release) phase = (1 - delta / release) ** 2;
-      envelope = Math.max(envelope, phase * clamp(Number(event.amplitude) || 0, 0, 0.12));
+      envelope = Math.max(envelope, phase * clamp(Number(event.amplitude) || 0, 0, 0.2));
     }
     return 1 + envelope;
   }

@@ -1,8 +1,7 @@
-# Source media, runtime videos and intermediate chroma-key renders can have
-# separate licensing terms. Motion maps stay public; users provide videos.
+# Raw source media and intermediate chroma-key renders are not repository assets.
+# Final extension/assets/cats/*/video.webm files are intentionally versioned.
 assets-source/
 tools/assets/work/
-extension/assets/cats/*/video.webm
 
 # Local backend state. Analysis results contain no audio, but stay local by
 # default; models are downloaded from their original distributors.

@@ -1,36 +1,31 @@
 {
   "schemaVersion": 1,
-  "defaultAssetId": "three-cats",
+  "defaultAssetId": "one-cat-1",
   "assets": [
     {
-      "id": "three-cats",
-      "name": "Dancing Cats Group",
-      "motionMap": "cats/three-cats/motion-map.json",
-      "videoIncluded": false
+      "id": "one-cat-1",
+      "name": "Dancing Cat Solo 1",
+      "motionMap": "cats/one-cat-1/motion-map.json"
     },
     {
-      "id": "solo-dancing-cat",
-      "name": "Solo Dancing Cat",
-      "motionMap": "cats/solo-dancing-cat/motion-map.json",
-      "videoIncluded": false
+      "id": "two-cats-1",
+      "name": "Dancing Cats Duo 1",
+      "motionMap": "cats/two-cats-1/motion-map.json"
     },
     {
-      "id": "kitten-trio",
-      "name": "Dancing Kitten Trio",
-      "motionMap": "cats/kitten-trio/motion-map.json",
-      "videoIncluded": false
+      "id": "two-cats-2",
+      "name": "Dancing Cats Duo 2",
+      "motionMap": "cats/two-cats-2/motion-map.json"
     },
     {
-      "id": "dancing-cat-duo",
-      "name": "Dancing Cat Duo",
-      "motionMap": "cats/dancing-cat-duo/motion-map.json",
-      "videoIncluded": false
+      "id": "three-cats-1",
+      "name": "Dancing Cats Trio 1",
+      "motionMap": "cats/three-cats-1/motion-map.json"
     },
     {
-      "id": "mushroom-kitten-duo",
-      "name": "Mushroom Kitten Duo",
-      "motionMap": "cats/mushroom-kitten-duo/motion-map.json",
-      "videoIncluded": false
+      "id": "three-cats-2",
+      "name": "Dancing Cats Trio 2",
+      "motionMap": "cats/three-cats-2/motion-map.json"
     }
   ]
 }

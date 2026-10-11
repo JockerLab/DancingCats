@@ -115,7 +115,7 @@ curl http://127.0.0.1:8765/health
 ```bash
 curl -X POST http://127.0.0.1:8765/v1/analysis \
   -H 'Content-Type: application/json' \
-  -d '{"youtubeUrl":"https://www.youtube.com/watch?v=VIDEO_ID","assetIds":["three-cats","solo-dancing-cat","kitten-trio","dancing-cat-duo","mushroom-kitten-duo"]}'
+  -d '{"youtubeUrl":"https://www.youtube.com/watch?v=VIDEO_ID","assetIds":["one-cat-1","two-cats-1","two-cats-2","three-cats-1","three-cats-2"]}'
 ```
 
 Ответ содержит `jobId`, общий `status` и подробный `stage`: `queued`, `downloading`, `analyzing`, `planning`, `cached`, `complete` или `error`. Состояние проверяется через `GET /v1/analysis/{jobId}`. После завершения `mapUrls` сопоставляет каждый `assetId` с готовой картой; для одиночного legacy-запроса также возвращается `mapUrl`. Переходы `status/stage` записываются в Docker-лог.

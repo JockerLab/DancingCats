@@ -201,9 +201,9 @@ def _build_pulse_events(
     }
     beat_multipliers = {
         1: 1.0,
-        2: 0.38,
-        3: 0.58,
-        4: 0.38,
+        2: 0.45,
+        3: 0.7,
+        4: 0.45,
     }
     for index, (beat, position) in enumerate(zip(analysis.beats, analysis.beat_positions)):
         if beat < start - 1e-6 or beat >= end - 1e-6:
@@ -215,9 +215,9 @@ def _build_pulse_events(
         onset_density = float(profile["onsetDensity"])
         energy_score = min(1, max(0, loudness * 0.5 + dynamics * 0.3 + onset_density * 0.2))
         section_multiplier = section_multipliers.get(section, 0.9)
-        strong_amplitude = min(0.1, max(0.01, 0.008 + energy_score * 0.074 * section_multiplier))
-        beat_multiplier = beat_multipliers.get(position, 0.38)
-        amplitude = max(0.004, strong_amplitude * beat_multiplier)
+        strong_amplitude = min(0.18, max(0.02, 0.02 + energy_score * 0.13 * section_multiplier))
+        beat_multiplier = beat_multipliers.get(position, 0.45)
+        amplitude = max(0.008, strong_amplitude * beat_multiplier)
         next_beat = analysis.beats[index + 1] if index + 1 < len(analysis.beats) else beat + 0.5
         beat_interval = max(0.2, next_beat - beat)
         events.append({

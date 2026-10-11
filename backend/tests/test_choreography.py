@@ -168,6 +168,9 @@ class ChoreographyTests(unittest.TestCase):
         self.assertGreater(verse_events[0]["amplitude"], verse_events[1]["amplitude"])
         self.assertGreater(verse_events[2]["amplitude"], verse_events[1]["amplitude"])
         self.assertGreater(chorus_events[0]["amplitude"], verse_events[0]["amplitude"])
+        self.assertGreaterEqual(verse_events[0]["amplitude"], 0.08)
+        self.assertGreaterEqual(chorus_events[0]["amplitude"], 0.12)
+        self.assertGreaterEqual(chorus_events[1]["amplitude"], 0.05)
 
 
 if __name__ == "__main__":

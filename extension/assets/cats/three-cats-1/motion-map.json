@@ -1,7 +1,6 @@
 {
   "schemaVersion": 2,
-  "id": "three-cats",
-  "entityMode": "single-group",
+  "id": "three-cats-1",
   "video": "video.webm",
   "duration": 11.8,
   "mediaDuration": 23.6,

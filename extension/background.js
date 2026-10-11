@@ -90,7 +90,7 @@ async function handleStartAnalysis(tabId, message) {
       youtubeUrl: message.youtubeUrl,
       assetIds: Array.isArray(message.assetIds) && message.assetIds.length
         ? message.assetIds
-        : [message.assetId || "three-cats"]
+        : [message.assetId || "one-cat-1"]
     })
   });
   logJobStatus(result);
@@ -105,7 +105,7 @@ async function handleGetAnalysis(tabId, jobId) {
   logJobStatus(result);
   if (!result.ok || result.data.status !== "complete") return result;
   const mapUrls = result.data.mapUrls
-    || (result.data.mapUrl ? { [result.data.assetId || "three-cats"]: result.data.mapUrl } : null);
+    || (result.data.mapUrl ? { [result.data.assetId || "one-cat-1"]: result.data.mapUrl } : null);
   if (!mapUrls || Object.values(mapUrls).some((url) => !isLocalMapUrl(url))) {
     return { ok: false, error: "Backend returned an invalid choreography URL" };
   }
